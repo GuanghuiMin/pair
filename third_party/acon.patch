@@ -1,0 +1,874 @@
+diff --git a/src/productive_agents/agents/appworld/agent.py b/src/productive_agents/agents/appworld/agent.py
+index 4d84927..bf93dc5 100644
+--- a/src/productive_agents/agents/appworld/agent.py
++++ b/src/productive_agents/agents/appworld/agent.py
+@@ -1,3 +1,4 @@
++import ast
+ import json
+ import logging
+ import re
+@@ -10,6 +11,109 @@ from productive_agents.agents.unified_agent import UnifiedAgent, UnifiedPromptBu
+ from productive_agents.agents.utils import LLMOutput
+ from .config import AppWorldAgentConfig
+ 
++
++# ----------------------------------------------------------------------------
++# Native function-calling (tool-call) action mode: the agent's action is the
++# `code` argument of a single execute_python tool call instead of free text.
++# Enabled with ACON_APPWORLD_ACTION_MODE=toolcall; the default is unchanged.
++# ----------------------------------------------------------------------------
++def _appworld_tool_description() -> str:
++    """Tool description shown to the agent every step (function-calling mode).
++
++    ACON_APPWORLD_TOOLDESC_NEUTRAL selects the wording:
++      unset / "0" : full description, ends "Call apis.supervisor.complete_task(answer=...) when done."
++      "1"         : same text with that sentence replaced by a restatement of the prompt's completion rule
++      "none"      : same text without any completion sentence
++      "minimal"   : interface only; AppWorld's own prompt carries every instruction
++      "empty"     : no description at all (the tool is declared with its name and parameters only)
++    """
++    mode = os.environ.get("ACON_APPWORLD_TOOLDESC_NEUTRAL", "0")
++    if mode == "minimal":
++        return "Execute Python code in the AppWorld REPL. Returns the printed output."
++    base = ("Execute Python code in the AppWorld REPL. The code may call AppWorld "
++            "APIs as apis.<app>.<endpoint>(...). Explore with "
++            "apis.api_docs.show_api_descriptions(app_name=...) and "
++            "apis.api_docs.show_api_doc(app_name=..., api_name=...). ")
++    if mode == "none":
++        tail = ""
++    elif mode == "1":
++        tail = ("Call apis.supervisor.complete_task() when done; pass answer= only if the task "
++                "asks for information. ")
++    else:
++        tail = "Call apis.supervisor.complete_task(answer=...) when done. "
++    return base + tail + "Returns the printed output."
++
++
++def _appworld_tool_spec() -> dict:
++    if os.environ.get("ACON_APPWORLD_TOOLDESC_NEUTRAL") == "empty":
++        return {"type": "function", "function": {
++            "name": "execute_python",
++            "parameters": {"type": "object", "properties": {"code": {"type": "string"}}, "required": ["code"]},
++        }}
++    return {"type": "function", "function": {
++        "name": "execute_python",
++        "description": _appworld_tool_description(),
++        "parameters": {
++            "type": "object",
++            "properties": {"code": {"type": "string", "description": "Python code to run"}},
++            "required": ["code"],
++        },
++    }}
++
++
++APPWORLD_EXECUTE_PYTHON_TOOL = [_appworld_tool_spec()]
++
++TOOLCALL_SYSTEM_SUFFIX = (
++    "\n\nEmit every action by calling the execute_python tool with a single "
++    "'code' string argument. Put all reasoning in your thinking; never write "
++    "code or prose outside the tool call."
++)
++
++# Match <think> and namespaced variants such as <mm:think>.
++_THINK_BLOCK_RE = re.compile(r"<\s*(?:[\w.-]+:)?think[^>]*>.*?<\s*/\s*(?:[\w.-]+:)?think\s*>",
++                             re.DOTALL | re.IGNORECASE)
++_THINK_INNER_RE = re.compile(r"<\s*(?:[\w.-]+:)?think[^>]*>(.*?)<\s*/\s*(?:[\w.-]+:)?think\s*>",
++                             re.DOTALL | re.IGNORECASE)
++
++
++def extract_reasoning(content: str) -> str:
++    """Return the model's full reasoning from a tool-call message `content`:
++    the inner text of <think>...</think> plus any visible preamble after it,
++    with the tags removed. Used to fold the reasoning into the recorded action
++    as inert # comments (thoughts-as-comments) for later history compression.
++    """
++    if not content:
++        return ""
++    inner = "\n".join(m.strip() for m in _THINK_INNER_RE.findall(content) if m.strip())
++    preamble = _strip_think_blocks(content)
++    parts = [p for p in (inner.strip(), preamble.strip()) if p]
++    return "\n\n".join(parts)
++
++
++def appworld_toolcall_enabled() -> bool:
++    """True when the env-gated native function-calling action mode is on."""
++    return os.environ.get("ACON_APPWORLD_ACTION_MODE", "text").strip().lower() == "toolcall"
++
++
++def _strip_think_blocks(text: str) -> str:
++    """Drop <think>...</think> blocks so stored assistant content stays lean."""
++    if not isinstance(text, str):
++        return ""
++    cleaned = _THINK_BLOCK_RE.sub("", text)
++    # Reasoning models sometimes emit a trailing </think> with no opening tag.
++    if re.search(r"<\s*/\s*(?:[\w.-]+:)?think\s*>", cleaned, flags=re.IGNORECASE):
++        cleaned = re.split(r"<\s*/\s*(?:[\w.-]+:)?think\s*>", cleaned, flags=re.IGNORECASE)[-1]
++    cleaned = re.sub(r"<\s*/?\s*(?:[\w.-]+:)?think[^>]*>", "", cleaned, flags=re.IGNORECASE)
++    return cleaned.strip()
++
++
++def _code_parses(code: str) -> bool:
++    try:
++        ast.parse(code or "")
++        return True
++    except SyntaxError:
++        return False
++
+ # AppWorld prompt template based on the minimal example
+ PROMPT_TEMPLATE = """
+ USER:
+@@ -206,43 +310,69 @@ class AppWorldActionProcessor(UnifiedActionProcessor):
+     """Handles processing of code responses for AppWorld."""
+     
+     def extract_action(self, response: str) -> str:
+-        """Extract Python code from LLM response.
+-        Removes optional <think>...</think> markers emitted by some models before further parsing.
++        """Extract the executable Python action from an LLM response.
++
++        AppWorld's protocol is "thoughts as code comments": one code block per
++        step, reasoning as Python comments. Models sometimes emit prose around
++        the code; every non-code line is kept but turned into an inert ``#``
++        comment, so the reasoning stays in the history and is never executed.
+         """
+-        # Strip any <think> tags while preserving their inner content
+         response = self._remove_think_markers(response)
+-        
+-        # Remove any markdown formatting
+         code = self._clean_markdown(response)
+-        
+-        # If the response is already clean code, return it
+-        if self._is_clean_code(code):
+-            return code
+-        
+-        # Try to extract code from various patterns
+-        patterns = [
+-            r'```python\s*(.*?)\s*```',
+-            r'```\s*(.*?)\s*```',
+-            r'`(.*?)`',
+-        ]
+-        
+-        for pattern in patterns:
++
++        # Prefer fenced code if the model fenced it.
++        for pattern in (r'```python\s*(.*?)\s*```', r'```\s*(.*?)\s*```'):
+             match = re.search(pattern, response, re.DOTALL)
+-            if match:
+-                extracted = match.group(1).strip()
+-                if extracted:
+-                    return extracted
+-        
+-        # If no code blocks found, return the whole response cleaned
+-        return code.strip()
++            if match and match.group(1).strip():
++                code = match.group(1).strip()
++                break
++
++        return self._comment_non_code(code)
++
++    def _comment_non_code(self, text: str) -> str:
++        """Return `text` with non-code (prose) lines commented so it parses.
++
++        Iteratively comments the line flagged by each SyntaxError until the
++        whole block is valid Python (comments are inert, so reasoning is kept
++        but never executed). Falls back to commenting everything (a safe no-op)
++        if no parseable subset is found. Already-valid code is returned as-is.
++        """
++        text = (text or "").strip()
++        if not text:
++            return text
++        try:
++            ast.parse(text)
++            return text
++        except SyntaxError:
++            pass
++        lines = text.split("\n")
++        for _ in range(len(lines) + 1):
++            try:
++                ast.parse("\n".join(lines))
++                return "\n".join(lines)
++            except SyntaxError as e:
++                ln = (getattr(e, "lineno", None) or 1) - 1
++                if not (0 <= ln < len(lines)):
++                    ln = 0
++                if lines[ln].lstrip().startswith("#"):
++                    nxt = next((i for i in range(len(lines))
++                                if lines[i].strip() and not lines[i].lstrip().startswith("#")), None)
++                    if nxt is None:
++                        break
++                    ln = nxt
++                lines[ln] = "# " + lines[ln]
++        return "\n".join(
++            ("# " + l) if (l.strip() and not l.lstrip().startswith("#")) else l
++            for l in lines
++        )
+     
+     def _remove_think_markers(self, text: str) -> str:
+         """Remove <think> and </think> tags, keeping inner content intact.
+         Handles variations in capitalization and any attributes (just in case), e.g. <think reason="x">.
+         """
+-        # Remove opening <think ...> and closing </think> tags only
+-        text = re.sub(r'<\s*think[^>]*>', '', text, flags=re.IGNORECASE)
+-        text = re.sub(r'<\s*/\s*think\s*>', '', text, flags=re.IGNORECASE)
++        # Remove opening <think ...> and closing </think> tags only (incl. <mm:think>)
++        text = re.sub(r'<\s*(?:[\w.-]+:)?think[^>]*>', '', text, flags=re.IGNORECASE)
++        text = re.sub(r'<\s*/\s*(?:[\w.-]+:)?think\s*>', '', text, flags=re.IGNORECASE)
+         return text
+     
+     def _clean_markdown(self, text: str) -> str:
+@@ -325,7 +455,90 @@ class AppWorldAgent(UnifiedAgent):
+     def _create_action_processor(self) -> AppWorldActionProcessor:
+         """Create AppWorld-specific action processor."""
+         return AppWorldActionProcessor(self.logger)
+-    
++
++    def _initialize_system_message(self):
++        """Initialize system message; append tool-call instruction when enabled."""
++        super()._initialize_system_message()
++        # ACON_APPWORLD_TOOLCALL_SUFFIX=0: add nothing to the system message in tool-call mode;
++        # the model picks up the tool from the declaration alone.
++        if appworld_toolcall_enabled() and os.environ.get("ACON_APPWORLD_TOOLCALL_SUFFIX", "1") != "0":
++            self.system_message = (self.system_message or "") + TOOLCALL_SYSTEM_SUFFIX
++
++    def toolcall_enabled(self) -> bool:
++        """Whether this agent is running in native function-calling mode."""
++        return appworld_toolcall_enabled()
++
++    def forward(self, prompt) -> LLMOutput:
++        """Generate an action.
++
++        In tool-call mode the model is invoked with the execute_python tool and
++        the action is read from message.tool_calls (no prose-as-code parsing).
++        The tool_call_id and serialized tool_calls are returned in metadata so
++        the run loop can record the assistant tool_call and feed the
++        observation back as a tool-role message.
++        """
++        if not self.toolcall_enabled():
++            return super().forward(prompt)
++
++        try:
++            message = self.llm.generate(
++                prompt,
++                tools=APPWORLD_EXECUTE_PYTHON_TOOL,
++                tool_choice="auto",
++                seed=self.seed,
++            )
++        except Exception as e:  # noqa: BLE001
++            self.logger.error(f"Tool-call generation error: {e}")
++            message = None
++
++        tool_calls = getattr(message, "tool_calls", None) if message is not None else None
++        full_content = getattr(message, "content", "") or "" if message is not None else ""
++        raw_content = _strip_think_blocks(full_content)
++        reasoning = extract_reasoning(full_content)
++        # Some servers return the thinking in a separate `reasoning`/`reasoning_content`
++        # field instead of inline <think> tags; fall back to it when inline extraction
++        # is empty so the recorded history keeps the model's reasoning.
++        if not reasoning and message is not None:
++            sep = getattr(message, "reasoning", None) or getattr(message, "reasoning_content", None)
++            if sep:
++                # Strip any think markers embedded in the separate reasoning field.
++                reasoning = _strip_think_blocks(str(sep))
++
++        if tool_calls:
++            tc = tool_calls[0]
++            arguments = tc.function.arguments or ""
++            try:
++                code = json.loads(arguments).get("code", "")
++            except Exception:  # noqa: BLE001
++                code = arguments
++            serialized = [{
++                "id": tc.id,
++                "type": "function",
++                "function": {"name": tc.function.name, "arguments": arguments},
++            }]
++            metadata = {
++                "tool_call_id": tc.id,
++                "tool_calls": serialized,
++                "action_mode": "toolcall",
++                "reasoning": reasoning,
++            }
++            if self.debug_mode:
++                self._debug_print(prompt, f"[tool_call execute_python] {code[:200]}")
++            return LLMOutput(action=code, response=raw_content, metadata=metadata)
++
++        # Fallback: model did not emit a tool_call. Extract code-only and never
++        # execute prose; if it does not parse, return an empty (no-op) action.
++        extracted = self.action_processor.extract_action(raw_content)
++        if not _code_parses(extracted):
++            self.logger.warning(
++                "Tool-call mode: no tool_call and fallback code did not parse; "
++                "emitting empty action to avoid executing prose-as-code."
++            )
++            extracted = ""
++        metadata = {"tool_call_id": None, "tool_calls": None,
++                    "action_mode": "toolcall_fallback", "reasoning": reasoning}
++        return LLMOutput(action=extracted, response=raw_content, metadata=metadata)
++
+     def _process_response(self, response: str) -> str:
+         """Process LLM response to extract code."""
+         return self.action_processor.extract_action(response)
+diff --git a/src/productive_agents/agents/memory.py b/src/productive_agents/agents/memory.py
+index 1a23f61..dcd6e48 100644
+--- a/src/productive_agents/agents/memory.py
++++ b/src/productive_agents/agents/memory.py
+@@ -143,28 +143,63 @@ class MemoryManager:
+                 "content": user_prompt
+             })
+ 
+-    def add_assistant_response(self, assistant_response: str, new_session: bool = False) -> None:
++    def add_assistant_response(self, assistant_response: str, new_session: bool = False,
++                               tool_calls: Optional[List[Dict[str, Any]]] = None) -> None:
+         """
+         Add an assistant response to the current conversation session.
+         
+         Args:
+             assistant_response: The response generated by the LLM
++            tool_calls: Optional list of OpenAI-style tool_call dicts to attach
++                to the assistant message (native function-calling mode). When
++                provided, the message must later be followed by a matching
++                tool-role response (see ``add_tool_response``).
+         """
+         current_session = self.llm_history[self.current_history_index()]
+-        current_session.append({
++        msg: Dict[str, Any] = {
+             "role": "assistant",
+             "content": assistant_response
+-        })
++        }
++        if tool_calls:
++            msg["tool_calls"] = tool_calls
++        current_session.append(msg)
+         self.step_alignment.append([
+             self.current_history_index(), 
+             len(current_session) - 1  # Index of the assistant's response
+         ])
+         self.step += 1  # Increment the step count
+         if not new_session:
+-            self.entire_session.append({    
++            entry: Dict[str, Any] = {
+                 "role": "assistant",
+                 "content": assistant_response
+-            })
++            }
++            if tool_calls:
++                entry["tool_calls"] = tool_calls
++            self.entire_session.append(entry)
++
++    def add_tool_response(self, tool_call_id: str, content: str,
++                          new_session: bool = False) -> None:
++        """
++        Add a tool-role response (native function-calling mode).
++
++        This is the structured counterpart to ``add_user_prompt``: in tool-call
++        mode the environment observation is fed back as the result of the
++        assistant's ``execute_python`` tool_call rather than as a plain user
++        turn.
++
++        Args:
++            tool_call_id: The id of the assistant tool_call this responds to.
++            content: The tool output (environment observation).
++        """
++        current_session = self.llm_history[self.current_history_index()]
++        msg = {
++            "role": "tool",
++            "tool_call_id": tool_call_id,
++            "content": content,
++        }
++        current_session.append(msg)
++        if not new_session:
++            self.entire_session.append(dict(msg))
+ 
+     def get_current_session(self) -> List[Dict[str, str]]:
+         """Get the current conversation session for LLM API calls."""
+@@ -255,15 +290,37 @@ class MemoryManager:
+         history_text = ''
+         for i, message in enumerate(history):
+             # Exclude the first user message
+-            if i == 1 and message['role'] == 'user':
++            if i == 1 and message.get('role') == 'user':
+                 continue
+-            role = message['role']
+-            content = message['content']
++            role = message.get('role')
++            content = message.get('content') or ''
+             # add as USER: or ASSISTANT: prefix
+             if role == 'user':
+                 history_text += f'USER:\n{content}\n\n'
+             elif role == 'assistant':
+-                history_text += f'ASSISTANT:\n{content}\n\n'
++                # Native function-calling: assistant content holds the reasoning
++                # (thoughts-as-comments) and the executed code lives in tool_calls.
++                # Render both so the compressor sees reasoning + action.
++                parts = []
++                if content.strip():
++                    parts.append(content)
++                for tc in (message.get('tool_calls') or []):
++                    fn = (tc.get('function') or {}) if isinstance(tc, dict) else {}
++                    args = fn.get('arguments') or ''
++                    try:
++                        _d = json.loads(args)
++                        # execute_python carries `code`; execute_action carries the bare `action`
++                        code = _d.get('code') if isinstance(_d, dict) and 'code' in _d else (_d.get('action', args) if isinstance(_d, dict) else args)
++                        if not isinstance(code, str):
++                            code = json.dumps(code)
++                    except Exception:
++                        code = args
++                    if code:
++                        parts.append(code)
++                history_text += 'ASSISTANT:\n' + "\n".join(parts) + '\n\n'
++            elif role == 'tool':
++                # Tool result is the observation turn (function-calling mode).
++                history_text += f'USER:\n{content}\n\n'
+         return history_text.strip()
+     
+     def extract_last_k_turns(self, session: List[Dict[str, str]], k: int) -> List[Dict[str, str]]:
+@@ -288,8 +345,9 @@ class MemoryManager:
+         
+         # Start from the end and work backwards
+         while i >= 0 and turn_count < k:
+-            if session[i]['role'] == 'user':
+-                # Found a user message (observation), now look for the preceding assistant message
++            # A 'tool' message (function-calling result) is also an observation turn.
++            if session[i]['role'] in ('user', 'tool'):
++                # Found an observation, now look for the preceding assistant message
+                 user_msg = session[i]
+                 assistant_msg = None
+                 
+@@ -398,15 +456,25 @@ class MemoryManager:
+             
+             preserved_turns = filtered_preserved_turns
+             
+-            # Find the index where preserved turns start in the current session
++            # Find the index where preserved turns start in the current session.
++            # Match by object IDENTITY (the preserved messages are the same dict
++            # objects returned by extract_last_k_turns) rather than by content:
++            # in native function-calling mode the assistant `content` is the
++            # reasoning (sometimes empty/duplicate), so content-equality matching
++            # could lock onto an early turn and silently skip compression.
+             preserved_start_idx = len(current_session)
+             if preserved_turns:
+-                # Find where the first preserved message appears in the session
+                 for i, msg in enumerate(current_session):
+-                    if (msg['role'] == preserved_turns[0]['role'] and 
+-                        msg['content'] == preserved_turns[0]['content']):
++                    if msg is preserved_turns[0]:
+                         preserved_start_idx = i
+                         break
++                else:
++                    # Fallback to content match if identity lookup failed.
++                    for i, msg in enumerate(current_session):
++                        if (msg.get('role') == preserved_turns[0].get('role') and
++                                msg.get('content') == preserved_turns[0].get('content')):
++                            preserved_start_idx = i
++                            break
+ 
+             # Create history text excluding the preserved turns
+             if preserved_start_idx > 2: # first two turn should not be preserved
+@@ -438,7 +506,12 @@ class MemoryManager:
+                     history=history_text, # without summary and without preserved turns
+                     prev_history_summary=self.prev_history_summary,
+                     raw_history=history_for_summarization,
+-                    # opt_args=opt_args,
++                    # Expose the still-raw tail to benchmark-agnostic compression
++                    # controllers. Existing optimizers ignore this optional field.
++                    opt_args={
++                        **(opt_args or {}),
++                        "preserved_turns": preserved_turns,
++                    },
+                 )
+                 #### TODO: This results in the accumulation of history summaries.
+                 # We should not accumulate history summaries, but rather replace the previous one.
+@@ -488,12 +561,22 @@ class MemoryManager:
+             # Add the optimized history as user prompt
+             self.add_user_prompt(user_prompt, new_session=True)
+             
+-            # Add the preserved last k turns back to the new session
++            # Add the preserved last k turns back to the new session, keeping
++            # function-calling structure intact (assistant tool_calls + matching
++            # tool result) so the rebuilt conversation stays API-valid.
+             for msg in preserved_turns:
+                 if msg['role'] == 'user':
+                     self.add_user_prompt(msg['content'], new_session=True)
+                 elif msg['role'] == 'assistant':
+-                    self.add_assistant_response(msg['content'], new_session=True)
++                    self.add_assistant_response(
++                        msg.get('content', '') or '', new_session=True,
++                        tool_calls=msg.get('tool_calls'),
++                    )
++                elif msg['role'] == 'tool':
++                    self.add_tool_response(
++                        msg.get('tool_call_id'), msg.get('content', '') or '',
++                        new_session=True,
++                    )
+             
+             self.prev_history_summary = optimized_history
+         else:
+diff --git a/src/productive_agents/agents/unified_agent.py b/src/productive_agents/agents/unified_agent.py
+index f4ec1b2..bf965d4 100644
+--- a/src/productive_agents/agents/unified_agent.py
++++ b/src/productive_agents/agents/unified_agent.py
+@@ -348,9 +348,17 @@ class UnifiedAgent(BaseAgent):
+                             pass
+                         self._system_prompt_printed = True
+                 
+-                # Build and add user prompt
++                # Build and add user prompt. In native function-calling mode
++                # the environment observation is fed back as the result of the
++                # previous execute_python tool_call (a tool-role message)
++                # instead of a plain user turn.
+                 user_prompt = self.build_prompt(env)
+-                self.memory_manager.add_user_prompt(user_prompt)
++                pending_tc_id = getattr(self, "_pending_tool_call_id", None)
++                if pending_tc_id:
++                    self.memory_manager.add_tool_response(pending_tc_id, user_prompt)
++                    self._pending_tool_call_id = None
++                else:
++                    self.memory_manager.add_user_prompt(user_prompt)
+                 
+                 # History optimization if enabled
+                 if self.memory_manager.do_history_optimization:
+@@ -375,8 +383,14 @@ class UnifiedAgent(BaseAgent):
+                     action_display = action[:200] + "..." if len(str(action)) > 200 else action
+                     print(f"Generated action: {action_display}")
+                 
+-                # Add assistant response to memory
+-                self.memory_manager.add_assistant_response(raw_response)
++                # Add assistant response to memory (with tool_calls in
++                # function-calling mode so the next observation can be bound to
++                # it as a tool-role message).
++                tc_meta = llm_output.metadata or {}
++                self.memory_manager.add_assistant_response(
++                    raw_response, tool_calls=tc_meta.get("tool_calls")
++                )
++                self._pending_tool_call_id = tc_meta.get("tool_call_id")
+                 
+                 # Execute action in environment
+                 obs, reward, done, info = env.step(action)
+diff --git a/src/productive_agents/agents/utils.py b/src/productive_agents/agents/utils.py
+index 42573d1..25c8f7a 100644
+--- a/src/productive_agents/agents/utils.py
++++ b/src/productive_agents/agents/utils.py
+@@ -36,7 +36,16 @@ class LLMManager:
+         if any(pattern in model_name for pattern in ['gpt', 'o1', 'o3', 'o4']):
+             if model_name.startswith('azure/'):
+                 model_name = model_name.split('/')[1]
+-            
++
++            # ChatGPT talks only to api.openai.com's default host and has no
++            # function-tool support, so an OpenAI model cannot run AppWorld's
++            # toolcall mode through it. When the endpoint is configured explicitly,
++            # use the OpenAI-compatible vLLM client instead: same wire protocol,
++            # plus tools and reasoning_effort. Unset ACON_VLLM_BASE_URL keeps the
++            # original path exactly, and nothing else in the dispatch changes.
++            if os.environ.get("ACON_VLLM_BASE_URL"):
++                return vLLM(model_name, system_message, lora_name=lora_name)
++
+             # Load OpenAI key from config instead of using the key parameter
+             openai_key = load_openai_key_from_config()
+             if not openai_key:
+diff --git a/src/productive_agents/env/officebench/env.py b/src/productive_agents/env/officebench/env.py
+index 873f495..fea2efa 100644
+--- a/src/productive_agents/env/officebench/env.py
++++ b/src/productive_agents/env/officebench/env.py
+@@ -1,4 +1,5 @@
+ import json
++import shlex
+ import os
+ import re
+ import shutil
+@@ -370,15 +371,24 @@ class OfficeBenchEnv(BaseEnv):
+         pass
+     
+     def clean_cmd(self, action: str) -> str:
+-        """Cleans action string"""
+-        entrypoint = "/bin/bash" 
++        """Wrap an agent action so that bash, and only bash, parses it.
++
++        The action is bash source and must reach `bash -c` byte for byte. The
++        original wrapper interpolated it between triple double quotes and the
++        result went through Popen(shell=True), so an outer shell parsed it
++        first: a trailing space broke heredoc terminators, and any double quote
++        inside the action ended the string early. shlex.quote gives bash the
++        literal action to parse once.
++        """
++        entrypoint = "/bin/bash"
+         if self.current_app == "calendar" or self.current_app == "email":
+-            action = action.replace("\"", "\'")
++            # With the action quoted properly, double quotes inside single-quoted
++            # arguments are legal and need no rewriting.
+             action += f" --workdir {self.task_dir}"
+-        command = '{} -c """ {} """'.format(entrypoint, action.strip())
++        command = "{} -c {}".format(entrypoint, shlex.quote(action.strip()))
+         print('COMMAND:', command)
+         return command
+-    
++
+     def _write_answer(self, answer: str, file_path: str):
+         answer = str(answer)
+         answer = answer.replace('"', '').replace("'", '')
+diff --git a/src/productive_agents/llm.py b/src/productive_agents/llm.py
+index 7281e68..3e71f83 100644
+--- a/src/productive_agents/llm.py
++++ b/src/productive_agents/llm.py
+@@ -36,6 +36,28 @@ except Exception:
+ import base64
+ import logging
+ import os
++import re as _re
++
++
++def _acon_strip_think(text):
++    """Strip <think>...</think> reasoning blocks from a model's text output.
++
++    Enabled with ACON_VLLM_STRIP_THINK=1; the default behaviour is unchanged.
++    Handles fully tagged blocks, a trailing </think> with no opening tag, and
++    leftover bare tags.
++    """
++    if not isinstance(text, str) or os.environ.get("ACON_VLLM_STRIP_THINK") != "1":
++        return text
++    # Match <think>, </think> and namespaced variants such as <mm:think>.
++    cleaned = _re.sub(r"<\s*(?:[\w.-]+:)?think[^>]*>.*?<\s*/\s*(?:[\w.-]+:)?think\s*>", "", text,
++                      flags=_re.DOTALL | _re.IGNORECASE)
++    # Reasoning models sometimes emit "...reasoning... </think> answer"
++    # with no opening tag; keep only the content after the final closing tag.
++    if _re.search(r"<\s*/\s*(?:[\w.-]+:)?think\s*>", cleaned, flags=_re.IGNORECASE):
++        cleaned = _re.split(r"<\s*/\s*(?:[\w.-]+:)?think\s*>", cleaned, flags=_re.IGNORECASE)[-1]
++    # Drop any leftover bare tags.
++    cleaned = _re.sub(r"<\s*/?\s*(?:[\w.-]+:)?think[^>]*>", "", cleaned, flags=_re.IGNORECASE)
++    return cleaned.strip()
+ 
+ # Set up a dedicated logger for this module
+ logger = logging.getLogger('llm')
+@@ -126,9 +148,9 @@ def calculate_api_cost(model_name: str, input_tokens: int, output_tokens: int) -
+             break
+     
+     if pricing is None:
+-        # Default to gpt-4o pricing if model not found
+-        logger.warning(f"No pricing found for model {model_name}, using gpt-4o pricing")
+-        pricing = MODEL_PRICING['gpt-4o']
++        # Unknown model: no pricing table entry. Use zero cost rather than crashing.
++        logger.warning(f"No pricing found for model {model_name}, using zero cost")
++        pricing = {'input': 0.0, 'output': 0.0}
+     
+     # Calculate cost (pricing is per 1M tokens)
+     input_cost = (input_tokens / 1_000_000) * pricing['input']
+@@ -471,8 +493,8 @@ class vLLM(BaseLLMModel):
+         super().__init__(model_name, system_message, log_file, log_level)
+         
+         self.client = OpenAI(
+-            base_url="http://localhost:8000/v1",
+-            api_key="token-abc",
++            base_url=os.environ.get("ACON_VLLM_BASE_URL", "http://localhost:8000/v1"),
++            api_key=os.environ.get("ACON_VLLM_API_KEY", "token-abc"),
+         )
+         self.lora_name = lora_name
+         if self.lora_name and "=" in self.lora_name:
+@@ -480,9 +502,21 @@ class vLLM(BaseLLMModel):
+         if self.lora_name:
+             self.model_name = self.lora_name
+ 
+-    def generate(self, prompt, n=1, max_tokens=2048, temperature=None, seed=None, **kwargs):
+-        """Generate response using vLLM server"""
++    def generate(self, prompt, n=1, max_tokens=None, temperature=None, seed=None,
++                 tools=None, tool_choice="auto", **kwargs):
++        """Generate response using vLLM server.
++
++        When ``tools`` is provided the model is invoked in native
++        function-calling mode and the full ``message`` object (with
++        ``tool_calls``) is returned so the caller can read structured actions.
++        When ``tools`` is None the historical string-return behaviour is
++        preserved exactly (no change to existing call sites).
++        """
+         try:
++            # Thinking models can spend most of a small budget on reasoning; the
++            # default is generous and overridable through ACON_VLLM_MAX_TOKENS.
++            if max_tokens is None:
++                max_tokens = int(os.environ.get("ACON_VLLM_MAX_TOKENS", "8192"))
+             messages = self._build_messages(prompt)
+             options = self.get_model_options(
+                 temperature=temperature, 
+@@ -497,8 +531,40 @@ class vLLM(BaseLLMModel):
+             options["extra_body"] = {
+                 "presence_penalty": 0.5, # Default presence penalty
+                 "chat_template_kwargs": {"enable_thinking": False},
+-            }  
+-            
++            }
++            # Some chat templates reject the enable_thinking kwarg; drop it on request.
++            if os.environ.get("ACON_VLLM_NO_THINKING_KWARG") == "1":
++                options["extra_body"] = {"presence_penalty": 0.5}
++
++            # Optional sampling overrides; defaults unchanged when unset.
++            _tp = os.environ.get("ACON_VLLM_TOP_P")
++            if _tp is not None:
++                options["top_p"] = float(_tp)
++            _tk = os.environ.get("ACON_VLLM_TOP_K")
++            if _tk is not None:
++                options["extra_body"]["top_k"] = int(_tk)
++
++            # OpenAI reasoning models refuse function tools unless reasoning is off:
++            # "Function tools with reasoning_effort are not supported ... in
++            # /v1/chat/completions". AppWorld runs in toolcall mode, so the agent
++            # cannot work on those models without this. Unset -> nothing is sent and
++            # every self-hosted / ollama path is byte-identical to before.
++            _re = os.environ.get("ACON_VLLM_REASONING_EFFORT")
++            if _re:
++                options["reasoning_effort"] = _re
++
++            if tools is not None:
++                options["tools"] = tools
++                options["tool_choice"] = tool_choice
++
++            # Some reasoning models refuse function tools on /v1/chat/completions at
++            # ANY reasoning_effort other than 'none' and point at /v1/responses
++            # instead. Set ACON_VLLM_API_STYLE=responses to reach them there and keep
++            # reasoning on. Unset -> the chat path below, unchanged.
++            if os.environ.get("ACON_VLLM_API_STYLE") == "responses":
++                return self._generate_via_responses(
++                    messages, tools, tool_choice, max_tokens, n)
++
+             completion = self.client.chat.completions.create(
+                 model=self.model_name,
+                 messages=messages,
+@@ -513,14 +579,138 @@ class vLLM(BaseLLMModel):
+             else:
+                 # If no usage info, at least track the request
+                 self.total_requests += 1
+-            
++
++            # Tool-call mode: hand back the raw message so the agent can read
++            # structured tool_calls (no prose-as-code contamination).
++            if tools is not None:
++                return completion.choices[0].message
++
+             if n > 1:
+-                return [choice.message.content for choice in completion.choices]
+-            return completion.choices[0].message.content
++                return [_acon_strip_think(choice.message.content) for choice in completion.choices]
++            return _acon_strip_think(completion.choices[0].message.content)
+         except Exception as e:
+             logger.error(f"vLLM generation Error: {e}")
++            if tools is not None:
++                # Surface the failure as an empty message-like object so the
++                # agent's fallback path can handle it without crashing.
++                return None
+             return "None"
+ 
++    # ---------------------------------------------------------------- responses --
++    # The Responses API is the only way to combine function tools with reasoning on
++    # some models. Callers upstream (the AppWorld agent, its memory manager, the
++    # compressor) all speak chat-completions shapes, so this translates in both
++    # directions and returns an object that quacks like a chat message: `.content`,
++    # `.tool_calls[i].id`, `.tool_calls[i].function.{name,arguments}`, `.reasoning`.
++    @staticmethod
++    def _to_responses_input(messages):
++        """chat-completions messages -> Responses `input` items."""
++        items = []
++        for m in messages:
++            role = m.get("role")
++            if role == "assistant" and m.get("tool_calls"):
++                if m.get("content"):
++                    items.append({"role": "assistant", "content": m["content"]})
++                for tc in m["tool_calls"]:
++                    fn = tc.get("function", {}) if isinstance(tc, dict) else {}
++                    items.append({
++                        "type": "function_call",
++                        "call_id": (tc.get("id") if isinstance(tc, dict) else None),
++                        "name": fn.get("name", ""),
++                        "arguments": fn.get("arguments", "") or "{}",
++                    })
++            elif role == "tool":
++                items.append({
++                    "type": "function_call_output",
++                    "call_id": m.get("tool_call_id"),
++                    "output": m.get("content") or "",
++                })
++            else:
++                items.append({"role": role, "content": m.get("content") or ""})
++        return items
++
++    @staticmethod
++    def _to_responses_tools(tools):
++        """chat-completions tool specs -> Responses flat tool specs."""
++        out = []
++        for t in tools or []:
++            fn = t.get("function", t)
++            out.append({
++                "type": "function",
++                "name": fn.get("name", ""),
++                "description": fn.get("description", "") or "",
++                "parameters": fn.get("parameters", {"type": "object", "properties": {}}),
++            })
++        return out
++
++    def _generate_via_responses(self, messages, tools, tool_choice, max_tokens, n):
++        class _Fn:
++            def __init__(self, name, arguments):
++                self.name, self.arguments = name, arguments
++
++        class _ToolCall:
++            def __init__(self, call_id, name, arguments):
++                self.id, self.type = call_id, "function"
++                self.function = _Fn(name, arguments)
++
++        class _Msg:
++            def __init__(self, content, tool_calls, reasoning):
++                self.content, self.tool_calls, self.reasoning = content, tool_calls, reasoning
++                self.reasoning_content = reasoning
++
++        kwargs = {
++            "model": self.model_name,
++            "input": self._to_responses_input(messages),
++            "max_output_tokens": max_tokens,
++        }
++        effort = os.environ.get("ACON_VLLM_REASONING_EFFORT")
++        if effort:
++            # summary "auto": without it the Responses API returns reasoning items with an
++            # empty summary, so no reasoning text would reach the history.
++            kwargs["reasoning"] = {"effort": effort, "summary": "auto"}
++        if tools is not None:
++            kwargs["tools"] = self._to_responses_tools(tools)
++            kwargs["tool_choice"] = tool_choice
++            # one tool call per step: the harness executes only the first call.
++            kwargs["parallel_tool_calls"] = False
++
++        resp = self.client.responses.create(**kwargs)
++
++        usage = getattr(resp, "usage", None)
++        if usage:
++            self._update_token_usage(getattr(usage, "input_tokens", 0) or 0,
++                                    getattr(usage, "output_tokens", 0) or 0)
++        else:
++            self.total_requests += 1
++
++        text_parts, calls, reasoning_parts = [], [], []
++        for item in (getattr(resp, "output", None) or []):
++            kind = getattr(item, "type", None)
++            if kind == "function_call":
++                calls.append(_ToolCall(getattr(item, "call_id", None) or getattr(item, "id", None),
++                                       getattr(item, "name", "") or "",
++                                       getattr(item, "arguments", "") or ""))
++            elif kind == "message":
++                for c in (getattr(item, "content", None) or []):
++                    t = getattr(c, "text", None)
++                    if t:
++                        text_parts.append(t)
++            elif kind == "reasoning":
++                for s in (getattr(item, "summary", None) or []):
++                    t = getattr(s, "text", None)
++                    if t:
++                        reasoning_parts.append(t)
++
++        content = "\n".join(text_parts)
++        # Keep the reasoning summary reachable for callers of the string-returning path.
++        self.last_reasoning_summary = "\n".join(reasoning_parts)
++        if tools is not None:
++            return _Msg(content, calls or None, "\n".join(reasoning_parts))
++        if n > 1:
++            return [_acon_strip_think(content)]
++        return _acon_strip_think(content)
++
++
+ class vLLMLocal(BaseLLMModel):
+     def __init__(self, model_name, system_message=None, lora_path=None):
+         super().__init__(model_name, system_message)
