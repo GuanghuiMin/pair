@@ -61,11 +61,19 @@ pair/fit_tasks.py         Step 4: the 12 longest training trajectories
 pair/selection.py         Step 4: Pass^2, ties by fewer steps
 pair/report.py            pass rate, Pass^k, Pass@k over evaluation runs
 pair/benchmarks/<name>/   run.py (agent runner), boundaries / rollouts (Steps 1-2), evidence.py (benchmark-specific rendering)
-prompts/p0                the original structured compression prompt P0
-prompts/p0_prefix         P0 conditioned on the agent's own prefix ({{ agent_prompt }})
+prompts/p0                the original structured compression prompt P0 (history-only start)
+prompts/p0_prefix         P0 conditioned on the agent's own prefix ({{ agent_prompt }}) (prefix-conditioned start)
+prompts/<benchmark>/      the adapted prompts selected by the pipeline, one per start: history/ and prefix/
+output/<benchmark>/       held-out evaluation runs of those prompts, <start>/s{1,2,3}/ (run_records.jsonl + trajectories/)
 data/tasklists            AppWorld and OfficeBench train / test task lists (tau2 uses its own splits)
 scripts/pipeline_*.sh     the four steps in order, one script per benchmark
 ```
+
+`prompts/appworld`, `prompts/officebench` and `prompts/tau2_retail` hold the prompts that came out of the pipeline for
+each benchmark (`history/` adapted from `prompts/p0`, `prefix/` from `prompts/p0_prefix`); they are drop-in replacements
+for the start prompts. `output/` holds the three-seed held-out runs behind the reported numbers, in the runner's own
+layout, so any row can be recomputed with `pair.report`. Machine-specific paths inside the OfficeBench trajectories are
+replaced by `<OB_ROOT>` and `<OB_CANONICAL_TASKS>`.
 
 Every runner writes the same layout: `<run>/run_records.jsonl` with one line per task (`task_id`, `success`, `num_steps`, `n_compressions`, ...) and `<run>/trajectories/<task_id>.json` with the steps and the compaction events. Every command is resumable and skips work that is already recorded.
 

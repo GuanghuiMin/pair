@@ -1,0 +1,56 @@
+<downstream-agent-contract>
+The conversation below belongs to an agent operating under the following
+instructions. The summary you produce is the ONLY memory that agent keeps
+of the conversation, so preserve what these instructions make relevant.
+
+{{ agent_prompt }}
+</downstream-agent-contract>
+
+<conversation>
+{{ history }}
+</conversation>
+
+<previous-summary>
+{{ prev_summary }}
+</previous-summary>
+
+The messages above are NEW conversation messages to incorporate into the existing summary provided in <previous-summary> tags.
+
+Update the existing structured summary with new information. RULES:
+- Preserve still-valid information from the previous summary, but reconcile it against the new messages; remove or clearly mark superseded goals, decisions, blockers, and next steps.
+- Promote an item to Done only when the new messages establish that it actually occurred; keep requested, prepared, looked-up, confirmed, and submitted states distinct.
+- Preserve the latest active user request with its exact qualifiers, target entities, identifiers, option values, fallback, and confirmation state.
+- Bind every fact to the exact user, order, item, product, address, or branch it concerns; preserve ambiguity when the target has not been confirmed.
+- Do not infer availability, price, completion, confirmation, or a target entity from related or similar information.
+- Retain completed facts only when they are needed to continue, and do not restate them as new work.
+- Update Next Steps to contain only the minimum actions still required; remove duplicate lookups, repeated confirmations, and superseded branches.
+
+Use this EXACT format:
+
+## Goal
+[Preserve current goals and replace superseded goals with the latest active user goal. Include concrete wording, all materially relevant qualifiers, fallback choices, and exact entity/order/item identifiers.]
+
+## Constraints & Preferences
+- [Preserve current applicable constraints and preferences, adding new ones only when established by the new messages. Mark superseded preferences or branches as no longer active rather than presenting them as current.]
+
+## Progress
+### Done
+- [x] [Include only completed actions and established facts. Preserve exact identifiers, option values, prices, availability, and error messages needed for continuation; do not convert a request or preparation into completion.]
+
+### In Progress
+- [ ] [List only unresolved work, with the affected entity and the precise missing lookup, user input, verification, or confirmation.]
+
+### Blocked
+- [State only current blockers. Remove blockers resolved by the new messages and remove blockers belonging to superseded branches.]
+
+## Key Decisions
+- **[Decision]**: [Preserve current decisions that remain valid and add new decisions with their rationale. Clearly label provisional, user-confirmed, superseded, and not-yet-performed states; preserve exact option distinctions.]
+
+## Next Steps
+1. [Provide the minimum ordered actions still required from the updated state. Do not repeat completed lookups, confirmations, or presentations, and do not revive an abandoned fallback.]
+
+## Critical Context
+- [Preserve the exact latest active request, relevant confirmed facts, identifiers, statuses, exact option values, availability and price facts, unresolved ambiguities, and confirmation state. Bind each fact to its exact entity and distinguish confirmed, pending, blocked, and not-performed states.]
+- [Keep only context needed for the next action; omit unrelated historical branches and stale detail, while retaining any fact necessary to avoid selecting the wrong entity or repeating work.]
+
+Keep each section concise without omitting information needed to select the correct entity or perform the next permitted action. Preserve exact identifiers, option values, file paths, function names, and error messages when relevant.

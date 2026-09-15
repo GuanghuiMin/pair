@@ -1,0 +1,51 @@
+<conversation>
+{{ history }}
+</conversation>
+
+<previous-summary>
+{{ prev_summary }}
+</previous-summary>
+
+The messages above are NEW conversation messages to incorporate into the existing summary provided in <previous-summary> tags.
+
+Update the existing structured summary with new information.
+
+RULES:
+- PRESERVE all still-valid existing information from the previous summary, especially the exact user goal, scope, constraints, settled results, completed pages, identifiers, filters, and actionable continuation state.
+- ADD only facts supported by the new messages. Do not invent a new task, constraint, result, API, capability, or pending action from documentation or credentials alone.
+- UPDATE the Progress section using the newest settled state. Move an item from "In Progress" to "Done" only when the new messages show it completed; never leave a completed lookup or page described as unchecked.
+- Preserve the distinction between the user's qualifying subset and broader aggregates, and between final task-specific results and intermediate subtotals, page totals, placeholders, or symbolic expressions.
+- Retain exact file paths, function names, identifiers, query parameters, page indexes, required wording, and error messages when they remain relevant.
+- Record authentication or reusable session availability when established, without copying secret passwords or token values. Do not make a completed login the next step unless the history shows it failed, expired, or otherwise must be retried.
+- Remove or revise information only when the new messages establish that it is obsolete, contradicted, or no longer relevant; do not discard settled pagination, scope, or final-submission facts.
+- Keep Next Steps limited to genuinely unresolved work and avoid speculative searches, repeated documentation reads, or re-investigation of settled facts.
+
+Use this EXACT format:
+
+## Goal
+[Preserve the user's exact objective and scope. Do not broaden it or replace it with a task inferred from exploratory actions.]
+
+## Constraints & Preferences
+- [Preserve existing constraints and add only newly evidenced ones. Keep inclusion/exclusion criteria and required wording explicit.]
+
+## Progress
+### Done
+- [x] [Include all previously completed items that remain valid and newly completed items. Include every completed page or batch relevant to scope.]
+
+### In Progress
+- [ ] [List only genuinely unresolved work after incorporating the new messages. Do not repeat completed actions.]
+
+### Blocked
+- [Current evidenced blockers only; preserve exact errors and unavailable data, and remove resolved blockers.]
+
+## Key Decisions
+- **[Decision]**: [Preserve all valid prior decisions and add newly evidenced decisions. Keep qualifying results separate from aggregates and intermediate values separate from the settled final result.]
+
+## Next Steps
+1. [Update only for genuinely unresolved work. Use the shortest actionable sequence and reuse established APIs, identifiers, filters, page indexes, and available session state.]
+
+## Critical Context
+- [Preserve important exact paths, function names, identifiers, query parameters, completed pages, outputs, errors, settled results, and final-submission requirements. Never replace a concrete value with a literal placeholder or unsupported expression, and never expose secret credentials.]
+- [Or "(none)" if not applicable]
+
+Keep each section concise while preserving all settled scope and continuation-critical state. Do not invent facts, goals, actions, results, identifiers, APIs, or capabilities. Preserve exact file paths, function names, query parameters, identifiers, and error messages.

@@ -1,0 +1,44 @@
+<downstream-agent-contract>
+The conversation below belongs to an agent operating under the following
+instructions. The summary you produce is the ONLY memory that agent keeps
+of the conversation, so preserve what these instructions make relevant.
+
+{{ agent_prompt }}
+</downstream-agent-contract>
+
+<conversation>
+{{ history }}
+</conversation>
+
+The messages above are a conversation to summarize. Create a structured context checkpoint summary that another LLM will use to continue the work.
+
+Use this EXACT format:
+
+## Goal
+[State the latest active user goal or goals. Preserve the user’s concrete wording and all materially relevant qualifiers, targets, fallbacks, and entity/order/item identifiers; do not replace a concrete request with a generic description.]
+
+## Constraints & Preferences
+- [Record applicable policy constraints, user preferences, confirmation requirements, one-time-action limits, and payment or availability requirements. Distinguish current constraints from superseded preferences or branches.]
+- [Or "(none)" if none were mentioned]
+
+## Progress
+### Done
+- [x] [Record only actions actually completed or facts actually established. Preserve exact identifiers, option values, prices, availability, and error messages when relevant. Do not imply that an action was performed merely because it was requested or prepared.]
+
+### In Progress
+- [ ] [List only work genuinely still required. For each item, identify the exact entity and state what is known, what remains unresolved, and whether lookup, user input, or confirmation is required.]
+
+### Blocked
+- [State unresolved blockers precisely and bind them to the affected entity or branch. Do not retain a blocker after the user has supplied the missing information or chosen a different path.]
+
+## Key Decisions
+- **[Decision]**: [Brief rationale, including whether the decision is current, user-confirmed, superseded, or still provisional. Preserve exact option distinctions and do not infer a decision from an unresolved request.]
+
+## Next Steps
+1. [List the minimum ordered actions still needed from the current state. Do not repeat completed lookups, confirmations, or presentations; do not add a step for a superseded branch.]
+
+## Critical Context
+- [Preserve the exact latest active request, relevant user-confirmed facts, entity/order/item/product identifiers, current statuses, exact option values, availability and price facts, unresolved ambiguities, and confirmation state. Bind every fact to its entity and distinguish confirmed, pending, blocked, and not-performed states.]
+- [Do not include unrelated historical details unless they are required for the next action; do not use inferred or approximate values in place of exact values.]
+
+Keep each section concise, but do not omit information needed to select the correct entity or perform the next permitted action. Preserve exact identifiers, option values, file paths, function names, and error messages when relevant.

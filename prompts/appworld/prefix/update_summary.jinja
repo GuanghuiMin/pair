@@ -1,0 +1,63 @@
+<downstream-agent-contract>
+The conversation below belongs to an agent operating under the following
+instructions. The summary you produce is the ONLY memory that agent keeps
+of the conversation, so preserve what these instructions make relevant.
+
+{{ agent_prompt }}
+</downstream-agent-contract>
+
+<conversation>
+{{ history }}
+</conversation>
+
+<previous-summary>
+{{ prev_summary }}
+</previous-summary>
+
+The messages above are NEW conversation messages to incorporate into the existing summary provided in <previous-summary> tags.
+
+Update the existing structured summary with new information. RULES:
+- Preserve the user's complete objective and exact scope, filters, temporal boundaries, target population, requested output, and action-versus-information status.
+- Preserve all still-valid execution-critical information from the previous summary, including tokens, variable names, authenticated state, IDs, paths, exact outputs, calculations, errors, completed mutations, and final-submission semantics.
+- Add newly completed work only when evidenced by the new messages; do not mark planned work Done.
+- Update Progress precisely: move an item from In Progress to Done only when completed, keep genuine blockers, and do not reopen completed setup or reads.
+- Keep Next Steps limited to necessary unresolved actions from the current state; remove redundant documentation, re-login, re-reading, speculative branches, and already completed calls.
+- Preserve the exact task filter and aggregation rule; never substitute an unfiltered total, intermediate subtotal, or unrelated count for the requested result.
+- Preserve whether the final completion call requires answer or must omit it. Do not invent an answer or add an answer to an action-only completion.
+- Preserve evidenced blockers and failed calls accurately without inventing unsupported APIs or capabilities.
+- If something is genuinely no longer relevant, remove it only when doing so cannot erase execution-critical state, a constraint, an error, a completed mutation, or the final-submission contract.
+
+Use this EXACT format, preserving the section headers and order:
+
+## Goal
+[Preserve the complete existing goal; add task expansion only if evidenced. Retain all qualifying conditions and the required final output/submission semantics.]
+
+## Constraints & Preferences
+- [Preserve existing valid constraints and add newly evidenced constraints, including tool restrictions, pagination, output formatting, and whether answer is omitted or required.]
+- [Do not add speculative capabilities or requirements.]
+- [Or "(none)" if none were mentioned.]
+
+## Progress
+### Done
+- [x] [Include previously done items that remain relevant and newly completed items, with exact outputs, IDs, paths, variables, tokens, calculations, page coverage, and mutation results.]
+
+### In Progress
+- [ ] [Include only current unfinished work; remove items completed by the new messages and do not reintroduce completed setup.]
+
+### Blocked
+- [Current evidenced blockers and exact errors; remove resolved blockers, but do not convert an unsupported capability into an assumed solution.]
+
+## Key Decisions
+- **[Decision]**: [Preserve prior valid decisions and add new evidenced decisions, especially identity matching, filtering, date boundaries, aggregation, mutation order, and final-submission semantics.]
+- [Do not turn exploratory possibilities into mandatory decisions.]
+
+## Next Steps
+1. [Update from the actual current state and reference existing variables/tokens/IDs; do not repeat completed documentation, authentication, reads, pagination, or calculations.]
+2. [End with the exact required completion behavior: no answer for action-only tasks, or only the requested entity/number for information tasks.]
+
+## Critical Context
+- [Preserve all execution-critical details needed for the next action: exact paths, function names, signatures, variables, tokens, IDs, matched sets, page status, calculations, errors, and final submission.]
+- [Remove stale exploratory branches only when their removal cannot erase a needed fact or unresolved blocker.]
+- [Or "(none)" if not applicable.]
+
+Keep each section concise while preserving every fact required for correct execution and final submission. Preserve exact file paths, function names, error messages, IDs, variable names, and answer values when present.

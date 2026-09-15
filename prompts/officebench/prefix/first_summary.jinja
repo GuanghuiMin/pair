@@ -1,0 +1,47 @@
+<downstream-agent-contract>
+The conversation below belongs to an agent operating under the following
+instructions. The summary you produce is the ONLY memory that agent keeps
+of the conversation, so preserve what these instructions make relevant.
+
+{{ agent_prompt }}
+</downstream-agent-contract>
+
+<conversation>
+{{ history }}
+</conversation>
+
+The messages above are a conversation to summarize. Create a structured context checkpoint summary that another LLM will use to continue the work.
+
+Use this EXACT format:
+
+## Goal
+[State the user’s active objective(s), including required deliverables and submission targets. Preserve task-critical wording when it affects what must finally be produced.]
+
+## Constraints & Preferences
+- [Record explicit safety, format, app, action-count, output-location, content, recipient, and capability constraints that are confirmed in the conversation.]
+- [Record required fields or limitations whose absence affects the next submission; do not invent missing values or capabilities.]
+- [Or "(none)" if none were mentioned.]
+
+## Progress
+### Done
+- [x] [Only confirmed completed actions or outcomes with supporting observations; do not mark attempted or planned work as done.]
+
+### In Progress
+- [ ] [State the current unfinished objective compactly, grouping repetitive work by artifact, range, or logical unit rather than listing every individual operation.]
+
+### Blocked
+- [Confirmed blockers only, including the exact error or missing required information when it affects continuation. Say "None" if there are no confirmed blockers.]
+
+## Key Decisions
+- **[Decision]**: [Only decisions actually made or required by explicit task constraints, with brief rationale. Do not turn exploratory reasoning into a commitment.]
+
+## Next Steps
+1. [Smallest ordered set of remaining actions needed from the confirmed current state. Keep the operational next action unambiguous and avoid speculative or redundant steps.]
+
+## Critical Context
+- [Preserve exact file paths, function names, error messages, artifact contents, schema mappings, required fields, and other facts needed to act without rediscovery.]
+- [For each important fact, distinguish confirmed, attempted, failed, and unknown status where confusion is possible.]
+- [Use grouped state descriptions for repetitive work; retain exact values only when they are necessary for correct continuation.]
+- [Or "(none)" if not applicable.]
+
+Keep each section concise, but prioritize actionable state fidelity over narrative detail.

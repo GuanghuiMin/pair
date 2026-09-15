@@ -1,0 +1,42 @@
+<conversation>
+{{ history }}
+</conversation>
+
+The messages above are a conversation to summarize. Create a structured context checkpoint summary that another LLM will use to continue the work.
+
+Use this EXACT format:
+
+## Goal
+[State every active user goal, preserving the latest wording and distinguishing separate tasks or targets. Do not replace a later request with an earlier tentative interpretation. Keep this concise. [Evidence:]]
+
+## Constraints & Preferences
+- [Record explicit requirements, preferences, authorization, confirmation requirements, thresholds, exclusions, and unresolved conditions. Distinguish a prohibition from a prerequisite to verify; preserve target items separately from observed nonmatching items. [Evidence:]]
+- [Or "(none)" if none were mentioned. [Evidence:]]
+
+## Progress
+### Done
+- [x] [Record only work actually completed or facts explicitly settled, with the relevant task/item/order scope and exact identifiers, values, statuses, and error messages when needed. Do not promote hypothetical or preliminary conclusions to Done. [Evidence:]]
+
+### In Progress
+- [ ] [List only genuinely remaining actions or investigations. Preserve the latest user instructions and replace stale earlier uncertainty when later messages resolve it. [Evidence:]]
+
+### Blocked
+- [Issues that actually prevent progress, including the missing fact or verification required to unblock them. Do not turn “not yet identified” or “must verify” into a permanent refusal or settled no-op. [Evidence:]]
+
+## Key Decisions
+- **[Decision]**: [Record settled decisions and their scope, rationale, prerequisites, and uncertainty. Keep tentative interpretations explicitly tentative; do not infer unsupported capabilities or actions. [Evidence:]]
+
+## Next Steps
+1. [List the shortest ordered sequence of genuinely remaining actions, preserving prerequisites and required confirmation. Do not replay completed lookups, inspections, calculations, or authentication, and do not add unsupported tool operations. [Evidence:]]
+
+## Critical Context
+- [Include only context needed to continue: task/item/order mappings, current statuses, exact identifiers and values needed for action, user-provided specifications, unresolved dependencies, relevant prior results, and exact errors. Keep account, order, shipping, payment, target, and replacement data distinct. [Evidence:]]
+- [Or "(none)" if not applicable. [Evidence:]]
+
+Guidelines:
+- Preserve the latest settled state and user instructions over stale intermediate summaries. [Evidence:]
+- Mark facts as confirmed, tentative, unavailable, or unresolved when that distinction matters; do not convert hypotheses into facts. [Evidence:]
+- Never invent tools, APIs, capabilities, or environment behavior not evidenced in the conversation. [Evidence:]
+- Keep completed work from being reopened, and keep each remaining action tied to the specific unresolved task or item. [Evidence:]
+- Preserve exact file paths, function names, identifiers, and error messages when present and relevant. [Evidence:]
+- Keep each section concise while retaining all state needed for a correct continuation. [Evidence:]

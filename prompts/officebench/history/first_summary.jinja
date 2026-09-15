@@ -1,0 +1,36 @@
+<conversation>
+{{ history }}
+</conversation>
+
+The messages above are a conversation to summarize. Create a structured context checkpoint summary that another LLM will use to continue the work.
+
+Use this EXACT format and these section headers in this order:
+
+## Goal
+[State the user's actual objective, including separate objectives when present. Do not add objectives inferred only from possible future actions. Preserve task scope without expanding it into a workflow.]
+
+## Constraints & Preferences
+- [Record explicit requirements, preferences, output specifications, and unresolved required inputs. Distinguish requirements from suggestions and missing information.]
+- [Or "(none)" if none were mentioned]
+
+## Progress
+### Done
+- [x] [Include only actions or deliverables directly evidenced as completed. Never promote an attempted, failed, planned, or inferred action to Done.]
+
+### In Progress
+- [ ] [List only work actually begun or explicitly left unfinished in the history. Keep unfinished verification or finalization here when applicable; do not create an exhaustive procedural checklist.]
+
+### Blocked
+- [Record unresolved blockers and exact failure observations when they matter. Preserve whether the history proceeded, stopped, or merely noted the blocker; do not add a clarification request, default, or retry instruction unless present in the history.]
+
+## Key Decisions
+- **[Decision]**: [Record decisions explicitly made in the history, with brief rationale. Separate confirmed decisions from tentative plans, inferences, and suggested next actions.]
+
+## Next Steps
+1. [Give only the smallest evidence-based next action, or state that no next action is established. Do not expand a blocker into repeated inspections, app switches, retries, or verification steps; do not prescribe a clarification or guessed value unless the history did so.]
+
+## Critical Context
+- [Preserve exact paths, function names, action formats, current app, relevant identifiers, data values, and exact error messages needed to continue. Include malformed or rejected action evidence when relevant, and distinguish attempted from successful actions.]
+- [Or "(none)" if not applicable]
+
+Keep each section concise. Preserve exact file paths, function names, action syntax, current app, and error messages when present. Do not add unsupported capabilities, operations, defaults, or completion claims.

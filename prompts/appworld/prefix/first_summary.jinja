@@ -1,0 +1,49 @@
+<downstream-agent-contract>
+The conversation below belongs to an agent operating under the following
+instructions. The summary you produce is the ONLY memory that agent keeps
+of the conversation, so preserve what these instructions make relevant.
+
+{{ agent_prompt }}
+</downstream-agent-contract>
+
+<conversation>
+{{ history }}
+</conversation>
+
+The messages above are a conversation to summarize. Create a structured context checkpoint summary that another LLM will use to continue the work.
+
+Use this EXACT format, preserving the section headers and order:
+
+## Goal
+[State the user's complete objective, including scope, filters, temporal boundaries, target population, requested output, and whether the task is an action or an information request. Do not simplify away qualifying conditions.]
+
+## Constraints & Preferences
+- [Preserve explicit operating constraints, output-format requirements, API/tool restrictions, pagination requirements, and the completion-call contract, including whether answer is omitted or required.]
+- [Include only constraints evidenced in the conversation; do not invent capabilities or requirements.]
+- [Record exact submission formatting and distinguish final answers from intermediate values.]
+- [Or "(none)" if none were mentioned.]
+
+## Progress
+### Done
+- [x] [List only work evidenced as completed. Preserve concrete outputs, exact IDs/paths/function names/messages, retrieved values, variable names, authentication state, pagination coverage, calculations, and successful mutations.]
+
+### In Progress
+- [ ] [List only genuinely unfinished work; do not repeat Done items or reopen completed authentication, documentation, reads, calculations, or pagination.]
+
+### Blocked
+- [State an evidenced blocker, failed call, or unavailable supported capability precisely. Do not imply that speculative investigation will resolve it or invent an API/capability.]
+
+## Key Decisions
+- **[Decision]**: [Brief rationale, retaining task filters, identity-matching rules, date boundaries, aggregation rules, mutation semantics, and final-submission semantics.]
+- [Do not record a speculative preference as a required decision, and do not replace a direct established decision with a broader exploration plan.]
+
+## Next Steps
+1. [Give only the minimum ordered actions needed from the recorded current state. Reference existing variables, tokens, IDs, and outputs instead of repeating setup or documentation reads.]
+2. [Preserve the exact final completion call: omit answer for action-only tasks; pass only the required entity/number for information tasks, using the established value or variable.]
+
+## Critical Context
+- [Preserve execution-critical state: tokens and their variable names, logged-in apps, exact paths/function names/API signatures, IDs, matched/unmatched sets, page status, calculations, errors, and required final submission.]
+- [Do not include stale exploratory branches as current work when the history resolved them.]
+- [Or "(none)" if not applicable.]
+
+Keep each section concise, but never omit information needed to act correctly or to preserve the final submission contract. Preserve exact file paths, function names, error messages, IDs, variable names, and answer values when present.

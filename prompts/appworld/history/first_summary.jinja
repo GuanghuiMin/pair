@@ -1,0 +1,38 @@
+<conversation>
+{{ history }}
+</conversation>
+
+The messages above are a conversation to summarize. Create a structured context checkpoint summary that another LLM will use to continue the work.
+
+Use this EXACT format:
+
+## Goal
+[State the user's exact objective and scope. Preserve qualifiers such as which records, people, dates, directions, or categories are included or excluded. Do not infer or add a different task from API documentation or exploratory actions.]
+
+## Constraints & Preferences
+- [Preserve every explicit constraint, inclusion/exclusion rule, required wording, output requirement, and user preference. Distinguish the requested subset from broader aggregates.]
+- [Or "(none)" if none were mentioned]
+
+## Progress
+### Done
+- [x] [List only actions actually completed in the history. Include settled results, exact relevant identifiers, filters, page indexes, and all completed batches needed to establish scope. Do not mark a completed page or lookup as pending or unchecked.]
+
+### In Progress
+- [ ] [List only work explicitly unresolved at the end of the history. Do not repeat a completed action or documentation lookup as a next task.]
+
+### Blocked
+- [Record only evidenced blockers and their exact error messages or unavailable data. Do not invent blockers or capabilities.]
+
+## Key Decisions
+- **[Decision]**: [Preserve the user's scope and the evidence supporting it. Keep qualifying results, intermediate values, page totals, and overall aggregates distinct; do not promote an intermediate value to the final answer.]
+- **[Decision]**: [Preserve settled choices about filters, pagination, duplicate handling, required wording, and other task constraints. Do not introduce decisions unsupported by the history.]
+
+## Next Steps
+1. [Give only the smallest ordered set of genuinely unresolved actions. Reuse exact function/API names, identifiers, filters, and page indexes already established. Do not repeat completed authentication, documentation, lookup, or investigation steps.]
+
+## Critical Context
+- [Preserve the concrete facts needed to continue: exact paths, function names, identifiers, query parameters, completed pages, observed outputs, errors, and settled task-specific results. State that an authenticated or otherwise reusable session is available when established, but never copy secret token or password values.]
+- [Preserve the exact final-submission requirement and distinguish it from intermediate subtotals, page totals, placeholders, or symbolic expressions.]
+- [Or "(none)" if not applicable]
+
+Do not invent facts, goals, actions, results, identifiers, APIs, or capabilities. Keep the summary concise, but do not omit settled scope, completed pagination, or actionable continuation state. Preserve exact file paths, function names, query parameters, identifiers, and error messages.

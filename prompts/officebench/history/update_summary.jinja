@@ -1,0 +1,47 @@
+<conversation>
+{{ history }}
+</conversation>
+
+<previous-summary>
+{{ prev_summary }}
+</previous-summary>
+
+The messages above are NEW conversation messages to incorporate into the existing summary provided in <previous-summary> tags.
+
+Update the existing structured summary with new information. RULES:
+- PRESERVE established facts, exact paths, function names, action syntax, current app, error messages, unresolved blockers, and the distinction between completed, attempted, failed, and planned work. Do not silently convert a prior attempt or plan into completion.
+- ADD only materially new progress, decisions, constraints, or context from the new messages. Do not restate settled inspections as new next steps or expand the summary into a procedural checklist.
+- UPDATE the Progress section: move an item from "In Progress" to "Done" only when the new messages directly evidence completion; retain failed, unverified, and unfinished finalization states explicitly.
+- UPDATE "Next Steps" to the smallest evidence-based continuation. Do not add speculative retries, app switches, clarification requests, guessed values, or verification sequences merely because a blocker remains.
+- PRESERVE exact malformed-action, rejected-action, and tool-error evidence when it remains relevant, including the action form and the state/app involved. Do not replace exact evidence with a generic description.
+- If something is no longer relevant, remove it only when the new messages resolve or supersede it; do not remove unresolved blockers or unfinished work merely to keep the summary concise.
+
+Use this EXACT format and these section headers in this order:
+
+## Goal
+[Preserve the actual user objectives and add only objectives explicitly introduced by the new messages. Do not broaden the goal into possible future operations.]
+
+## Constraints & Preferences
+- [Preserve existing explicit requirements and unresolved required inputs; add only newly evidenced constraints or preferences. Distinguish requirements from missing information and tentative suggestions.]
+
+## Progress
+### Done
+- [x] [Include previously completed items and newly completed items supported by direct evidence. Do not include attempted, failed, planned, or inferred work.]
+
+### In Progress
+- [ ] [Reflect work actually underway or explicitly unfinished after incorporating the new messages. Keep the list concise and do not turn every possible operation into a required step.]
+
+### Blocked
+- [Preserve unresolved blockers and exact failure observations. Do not convert them into automatic clarification, default, retry, or app-switch instructions unless the new messages explicitly establish that behavior.]
+
+## Key Decisions
+- **[Decision]**: [Preserve prior decisions and add newly explicit decisions with brief rationale. Label tentative or inferred reasoning as such rather than presenting it as settled.]
+
+## Next Steps
+1. [State only the smallest evidence-based next action after the update, or state that no next action is established. Avoid repeated lookups, exhaustive cell/file operations, speculative retries, and unperformed verification workflows.]
+
+## Critical Context
+- [Preserve important exact paths, function names, action syntax, current app, identifiers, data, and error messages. Retain the distinction between successful, failed, attempted, and planned actions, including unfinished system finalization.]
+- [Or "(none)" if not applicable]
+
+Keep each section concise. Preserve exact file paths, function names, action syntax, current app, and error messages when present. Do not invent capabilities, APIs, defaults, outcomes, or additional work.

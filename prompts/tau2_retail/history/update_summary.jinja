@@ -1,0 +1,49 @@
+<conversation>
+{{ history }}
+</conversation>
+
+<previous-summary>
+{{ prev_summary }}
+</previous-summary>
+
+The messages above are NEW conversation messages to incorporate into the existing summary provided in <previous-summary> tags.
+
+Update the existing structured summary with new information. RULES:
+- Preserve the previous summary’s still-valid information, but remove or revise stale, superseded, tentative, or unresolved statements when the new messages settle them. [Evidence:]
+- Add the latest user goals, specifications, corrections, authorizations, confirmations, tool results, decisions, and exact errors. The latest explicit user instruction takes precedence over an earlier “not provided” or “not confirmed” state. [Evidence:]
+- Update the Progress section at the task/item level: move work to Done only when completed or explicitly settled; keep genuinely remaining work in In Progress; record the concrete missing prerequisite in Blocked. [Evidence:]
+- Do not convert “must investigate,” “not yet identified,” or “do not guess” into a permanent prohibition or a decision to leave an order/item unchanged. [Evidence:]
+- Preserve tentative interpretations as tentative and keep distinct referents distinct, especially desired targets versus observed nonmatching items and account data versus order or shipping data. [Evidence:]
+- Do not invent capabilities, APIs, actions, or transfer requirements that are not evidenced in the conversation. [Evidence:]
+- Avoid duplicating completed inspections, lookups, calculations, or confirmations; retain their result in compact form so the continuation does not repeat them. [Evidence:]
+- Make Next Steps contain only the minimal ordered actions still required, including prerequisites and required confirmation, without replaying the full workflow. [Evidence:]
+
+Use this EXACT format:
+
+## Goal
+[Preserve active goals and add newly introduced goals. Replace stale or tentative goal wording with the latest settled user request, while keeping separate tasks separate. [Evidence:]]
+
+## Constraints & Preferences
+- [Preserve still-valid constraints and add new ones. Record authorization, confirmation requirements, exclusions, thresholds, and unresolved prerequisites; distinguish prerequisites from prohibitions. [Evidence:]]
+
+## Progress
+### Done
+- [x] [Include previously completed work that remains relevant and newly completed or explicitly settled work. Do not mark hypothetical calculations, likely matches, or unverified eligibility as Done. [Evidence:]]
+
+### In Progress
+- [ ] [List only current remaining actions, updated for the newest messages and scoped to the relevant task/item/order. Remove stale work that has been completed or superseded. [Evidence:]]
+
+### Blocked
+- [Current blockers only, with the exact missing fact or verification needed. Do not treat an unresolved search as a permanent refusal or settled no-op. [Evidence:]]
+
+## Key Decisions
+- **[Decision]**: [Preserve valid decisions and add newly settled ones, with scope, rationale, uncertainty, and prerequisites. Do not infer unsupported capabilities or collapse distinct referents. [Evidence:]]
+
+## Next Steps
+1. [Update to the shortest ordered list of genuinely remaining actions. Do not repeat completed lookups, inspections, calculations, authentication, or catalog searches; do not add unsupported operations. [Evidence:]]
+
+## Critical Context
+- [Preserve only still-relevant continuation-critical facts and add new ones: exact identifiers, statuses, values, user specifications, task/item mappings, settled results, unresolved dependencies, and exact errors. Keep account, order, shipping, payment, target, and replacement data distinct. [Evidence:]]
+- [Or "(none)" if not applicable. [Evidence:]]
+
+Keep each section concise. Preserve exact file paths, function names, identifiers, and error messages when present and relevant. [Evidence:]

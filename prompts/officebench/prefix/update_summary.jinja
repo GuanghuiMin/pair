@@ -1,0 +1,60 @@
+<downstream-agent-contract>
+The conversation below belongs to an agent operating under the following
+instructions. The summary you produce is the ONLY memory that agent keeps
+of the conversation, so preserve what these instructions make relevant.
+
+{{ agent_prompt }}
+</downstream-agent-contract>
+
+<conversation>
+{{ history }}
+</conversation>
+
+<previous-summary>
+{{ prev_summary }}
+</previous-summary>
+
+The messages above are NEW conversation messages to incorporate into the existing summary provided in <previous-summary> tags.
+
+Update the existing structured summary with new information. RULES:
+- Preserve still-valid goals, constraints, confirmed completed work, decisions, artifact state, exact paths, mappings, required fields, and error messages from the previous summary.
+- Reconcile the previous summary against the new observations: correct stale or contradicted claims, and never preserve a claim of completion when the new history shows only an attempt or failure.
+- Add new confirmed progress and move an item from In Progress to Done only when the new messages provide confirming evidence.
+- Preserve the exact current artifact state and the concrete schema/data mapping needed for the next action; do not summarize an inspection without recording its actionable result when that result is known.
+- Preserve unresolved required submission fields and capability limitations explicitly; do not fill them with guesses.
+- Remove or consolidate stale errors, resolved intermediate details, and speculative plans when they no longer affect the current actionable state.
+- Keep repetitive unfinished work grouped by artifact, range, or logical unit instead of expanding it into one item per operation.
+- Do not turn exploratory reasoning into a Key Decision or mandatory method unless the conversation confirms that choice or an explicit constraint requires it.
+- Keep Next Steps to the smallest ordered set of actions needed from the confirmed current state, with one unambiguous immediate next action.
+
+Use this EXACT format:
+
+## Goal
+[Preserve existing goals and add newly confirmed goals; remove only goals shown to be no longer relevant.]
+
+## Constraints & Preferences
+- [Preserve valid constraints and add newly confirmed ones, including required fields and capability limitations.]
+- [Do not invent values, capabilities, or preferences.]
+
+## Progress
+### Done
+- [x] [Include previously confirmed completed items and newly confirmed completions only.]
+
+### In Progress
+- [ ] [Current unfinished work, stated compactly and grouped by logical unit.]
+
+### Blocked
+- [Current confirmed blockers and exact relevant errors or missing information; remove resolved blockers. Say "None" if none remain.]
+
+## Key Decisions
+- **[Decision]**: [Preserve confirmed decisions and add newly confirmed decisions with brief rationale; do not promote speculation.]
+
+## Next Steps
+1. [Minimal ordered actions from the current confirmed state.]
+
+## Critical Context
+- [Preserve and update exact paths, names, mappings, artifact contents, required fields, and error messages needed to continue without rediscovery.]
+- [Clearly distinguish confirmed, attempted, failed, and unknown facts.]
+- [Keep repetitive state compact rather than repeating every operation.]
+
+Keep each section concise while preserving actionable state fidelity.
