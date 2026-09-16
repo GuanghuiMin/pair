@@ -12,38 +12,39 @@ of the conversation, so preserve what these instructions make relevant.
 
 The messages above are a conversation to summarize. Create a structured context checkpoint summary that another LLM will use to continue the work.
 
-Use this EXACT format, preserving the section headers and order:
+Use this EXACT format:
 
 ## Goal
-[State the user's complete objective, including scope, filters, temporal boundaries, target population, requested output, and whether the task is an action or an information request. Do not simplify away qualifying conditions.]
+[State the user’s objective and preserve every scope, predicate, relationship, temporal, target, and required-action condition exactly. Do not broaden or narrow the objective.]
 
 ## Constraints & Preferences
-- [Preserve explicit operating constraints, output-format requirements, API/tool restrictions, pagination requirements, and the completion-call contract, including whether answer is omitted or required.]
-- [Include only constraints evidenced in the conversation; do not invent capabilities or requirements.]
-- [Record exact submission formatting and distinguish final answers from intermediate values.]
+- [Record only constraints, preferences, and operating rules explicitly present in the conversation or agent instructions. Do not invent filters, verification, ordering, deduplication, privacy, duration, authentication, or source requirements.]
+- [Preserve the answer-versus-action distinction: state whether completion requires an answer; do not require an answer for an external-action task.]
 - [Or "(none)" if none were mentioned.]
 
 ## Progress
 ### Done
-- [x] [List only work evidenced as completed. Preserve concrete outputs, exact IDs/paths/function names/messages, retrieved values, variable names, authentication state, pagination coverage, calculations, and successful mutations.]
+- [x] [List only work actually completed and observations actually obtained. Preserve complete target sets and pagination status; do not describe a first page as exhaustive unless completion is established.]
+- [x] [Preserve actionable state such as exact usable tokens, credentials, variables, API signatures, and documentation already retrieved when present.]
 
 ### In Progress
-- [ ] [List only genuinely unfinished work; do not repeat Done items or reopen completed authentication, documentation, reads, calculations, or pagination.]
+- [ ] [List only genuinely pending work. Keep unresolved facts unresolved, distinguish them from completed work, and do not turn an unresolved possibility into a mandatory blocker or speculative investigation.]
 
 ### Blocked
-- [State an evidenced blocker, failed call, or unavailable supported capability precisely. Do not imply that speculative investigation will resolve it or invent an API/capability.]
+- [Issues preventing progress, if and only if the history establishes that they prevent the task; otherwise state "None currently." Do not infer that an unreadable or unexplored item makes completion impossible.]
 
 ## Key Decisions
-- **[Decision]**: [Brief rationale, retaining task filters, identity-matching rules, date boundaries, aggregation rules, mutation semantics, and final-submission semantics.]
-- [Do not record a speculative preference as a required decision, and do not replace a direct established decision with a broader exploration plan.]
+- **[Decision]**: [Record only decisions supported by the task, operating rules, documented API behavior, or observed history. Label inferences as tentative; never assert an unverified date, relationship, identity match, source, or capability as fact.]
+- **[Completion mode]**: [State whether the final completion call requires an answer. For action-only tasks, preserve an answerless completion.]
 
 ## Next Steps
-1. [Give only the minimum ordered actions needed from the recorded current state. Reference existing variables, tokens, IDs, and outputs instead of repeating setup or documentation reads.]
-2. [Preserve the exact final completion call: omit answer for action-only tasks; pass only the required entity/number for information tasks, using the established value or variable.]
+1. [Give the smallest ordered set of steps justified by the established state. Do not reopen completed documentation, authentication, target discovery, or data retrieval. Do not add speculative alternate-source, verification, duplicate-checking, ordering, or post-action steps.]
+2. [For paginated work, continue only until the history establishes that all relevant pages were considered; preserve every already identified qualifying target.]
+3. [Complete with an answer only when the task requests information; otherwise complete without an answer.]
 
 ## Critical Context
-- [Preserve execution-critical state: tokens and their variable names, logged-in apps, exact paths/function names/API signatures, IDs, matched/unmatched sets, page status, calculations, errors, and required final submission.]
-- [Do not include stale exploratory branches as current work when the history resolved them.]
+- [Preserve exact file paths, function names, error messages, API signatures, usable credentials/tokens, variables, dates, target identifiers, and observed values needed to continue. Do not replace usable values with generic existence statements or alter facts.]
+- [Separate established facts, unresolved questions, and unsupported possibilities. Do not present a possibility as a requirement or blocker.]
 - [Or "(none)" if not applicable.]
 
-Keep each section concise, but never omit information needed to act correctly or to preserve the final submission contract. Preserve exact file paths, function names, error messages, IDs, variable names, and answer values when present.
+Keep each section concise while retaining all action-critical state. Preserve exact file paths, function names, error messages, target identifiers, and answer values.

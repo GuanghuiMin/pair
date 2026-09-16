@@ -17,47 +17,46 @@ of the conversation, so preserve what these instructions make relevant.
 The messages above are NEW conversation messages to incorporate into the existing summary provided in <previous-summary> tags.
 
 Update the existing structured summary with new information. RULES:
-- Preserve the user's complete objective and exact scope, filters, temporal boundaries, target population, requested output, and action-versus-information status.
-- Preserve all still-valid execution-critical information from the previous summary, including tokens, variable names, authenticated state, IDs, paths, exact outputs, calculations, errors, completed mutations, and final-submission semantics.
-- Add newly completed work only when evidenced by the new messages; do not mark planned work Done.
-- Update Progress precisely: move an item from In Progress to Done only when completed, keep genuine blockers, and do not reopen completed setup or reads.
-- Keep Next Steps limited to necessary unresolved actions from the current state; remove redundant documentation, re-login, re-reading, speculative branches, and already completed calls.
-- Preserve the exact task filter and aggregation rule; never substitute an unfiltered total, intermediate subtotal, or unrelated count for the requested result.
-- Preserve whether the final completion call requires answer or must omit it. Do not invent an answer or add an answer to an action-only completion.
-- Preserve evidenced blockers and failed calls accurately without inventing unsupported APIs or capabilities.
-- If something is genuinely no longer relevant, remove it only when doing so cannot erase execution-critical state, a constraint, an error, a completed mutation, or the final-submission contract.
+- [Preserve established goals, predicates, scope boundaries, relationship filters, temporal conditions, target sets, required mutations, and completion mode unless new messages explicitly change them. Never replace a restricted set with all records or all pending results.]
+- [Preserve exact actionable state from the previous summary and new messages, including usable tokens, credentials, variables, API signatures, documentation status, and observed values. Do not reduce it to generic existence claims.]
+- [Update the Progress section using only observed completion. Move an item from "In Progress" to "Done" only when the new messages establish completion; do not reopen completed work.]
+- [For paginated results, preserve pages retrieved, whether all pages were considered, and every qualifying target. Never treat a full page as proof that pagination is complete.]
+- [Keep unresolved facts unresolved. Do not convert uncertainty into a blocker, prohibition, mandatory extraction, alternate-source search, login, verification, deduplication, ordering, duration calculation, or post-action check unless explicitly established.]
+- [Preserve the distinction between external actions and informational answers. If the task is action-only, retain an answerless completion requirement; do not invent an answer value.]
+- [Preserve exact file paths, function names, error messages, target identifiers, and answer values. Do not alter observed facts or promote an inference to a fact.]
 
-Use this EXACT format, preserving the section headers and order:
+Use this EXACT format:
 
 ## Goal
-[Preserve the complete existing goal; add task expansion only if evidenced. Retain all qualifying conditions and the required final output/submission semantics.]
+[Preserve existing goals and add only goals explicitly introduced by the new messages. Preserve every task predicate and scope condition exactly.]
 
 ## Constraints & Preferences
-- [Preserve existing valid constraints and add newly evidenced constraints, including tool restrictions, pagination, output formatting, and whether answer is omitted or required.]
-- [Do not add speculative capabilities or requirements.]
-- [Or "(none)" if none were mentioned.]
+- [Preserve existing constraints and add only explicit new constraints. Do not add speculative filters, verification, ordering, deduplication, privacy, duration, authentication, or source requirements.]
+- [Preserve whether completion requires an answer; do not add an answer requirement to an action-only task.]
 
 ## Progress
 ### Done
-- [x] [Include previously done items that remain relevant and newly completed items, with exact outputs, IDs, paths, variables, tokens, calculations, page coverage, and mutation results.]
+- [x] [Include previously established completed items and newly completed items. Preserve complete target sets and pagination status.]
+- [x] [Retain exact usable credentials, tokens, variables, API signatures, and documentation already obtained.]
 
 ### In Progress
-- [ ] [Include only current unfinished work; remove items completed by the new messages and do not reintroduce completed setup.]
+- [ ] [List current work only; do not move unresolved possibilities into mandatory work, and do not reopen completed work.]
 
 ### Blocked
-- [Current evidenced blockers and exact errors; remove resolved blockers, but do not convert an unsupported capability into an assumed solution.]
+- [Current blockers established by the history; remove resolved blockers. Do not call an item blocked merely because an answer is uncertain or an optional route was not found.]
 
 ## Key Decisions
-- **[Decision]**: [Preserve prior valid decisions and add new evidenced decisions, especially identity matching, filtering, date boundaries, aggregation, mutation order, and final-submission semantics.]
-- [Do not turn exploratory possibilities into mandatory decisions.]
+- **[Decision]**: [Preserve prior supported decisions and add new supported decisions. Mark inferences as tentative and never assert unsupported dates, relationships, identity matches, sources, capabilities, or completion states.]
+- **[Completion mode]**: [Preserve whether the final completion call takes an answer. For action-only tasks, preserve an answerless completion.]
 
 ## Next Steps
-1. [Update from the actual current state and reference existing variables/tokens/IDs; do not repeat completed documentation, authentication, reads, pagination, or calculations.]
-2. [End with the exact required completion behavior: no answer for action-only tasks, or only the requested entity/number for information tasks.]
+1. [Update the ordered plan from the established current state. Do not repeat completed documentation, authentication, discovery, or retrieval, and do not add speculative verification, duplicate checks, alternate-source searches, ordering, or post-action work.]
+2. [Continue paginated retrieval only as needed to establish all relevant pages, and include every qualifying target already established.]
+3. [Use an answer argument only when the task requests information; otherwise complete without one.]
 
 ## Critical Context
-- [Preserve all execution-critical details needed for the next action: exact paths, function names, signatures, variables, tokens, IDs, matched sets, page status, calculations, errors, and final submission.]
-- [Remove stale exploratory branches only when their removal cannot erase a needed fact or unresolved blocker.]
-- [Or "(none)" if not applicable.]
+- [Preserve prior critical context and add new action-critical facts: exact paths, function names, errors, tokens, credentials, variables, dates, target identifiers, observed values, and answer values. Never replace usable context with a generic statement or alter a fact.]
+- [Keep established facts, unresolved questions, and unsupported possibilities visibly separate. Do not turn an unresolved possibility into a requirement or blocker.]
+- [Remove information only when the new messages explicitly establish that it is obsolete and its removal cannot change the continuation.]
 
-Keep each section concise while preserving every fact required for correct execution and final submission. Preserve exact file paths, function names, error messages, IDs, variable names, and answer values when present.
+Keep each section concise while preserving all action-critical state, exact identifiers, and completion requirements.
