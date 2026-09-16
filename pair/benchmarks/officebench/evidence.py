@@ -9,9 +9,9 @@ READ_OR_LIST = re.compile(r'"action"\s*:\s*"(read_file|list_files|read_email|lis
 
 PREFIX_NOTE = ("At run time the jinja variable {{ agent_prompt }} in both templates is replaced by the exact prefix "
                "the downstream agent received for that task: its system message (operating instructions, date, user, "
-               "apps, testbed path) followed by its first user message (the task and available apps). The text below "
-               "is that prefix for one task; the date, user, testbed path and task differ from task to task, so any "
-               "rule you write must hold for every task.")
+               "apps, testbed path) followed by its first user message (the task and available apps). Each counterexample "
+               "carries that prefix for its own task as agent_prompt_seen_by_compressor; the date, user, testbed path "
+               "and task differ from task to task, so any rule you write must hold for every task.")
 
 
 def _trajectory(b: dict, cache: dict):

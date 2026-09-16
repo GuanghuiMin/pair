@@ -11,8 +11,9 @@ COMPLETE = re.compile(r"complete_task\(([^)]{0,120})")
 
 PREFIX_NOTE = ("At run time the jinja variable {{ agent_prompt }} in both templates is replaced by the exact first "
                "user message the downstream agent received for that task (its operating instructions, the "
-               "supervisor's identity, and the task). The text below is that message for one task; the identity "
-               "and task fields differ from task to task, so any rule you write must hold for every task.")
+               "supervisor's identity, and the task). Each counterexample carries that message for its own task as "
+               "agent_prompt_seen_by_compressor; the identity and task fields differ from task to task, so any rule "
+               "you write must hold for every task.")
 
 
 def _trajectory(b: dict, cache: dict):

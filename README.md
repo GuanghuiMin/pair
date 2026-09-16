@@ -55,7 +55,7 @@ The exact commands are in [third_party/README.md](third_party/README.md).
 pair/compressor.py        summary compressor driven by a prompt directory (system_prompt / first_summary / update_summary)
 pair/verifier.py          Step 2: outcome hazard and interaction burden per boundary, retention rule
 pair/evidence.py          Step 3: retained boundaries -> counterexamples for the optimizer
-pair/propose.py           Step 3: optimizer LLM, five candidates, section skeleton locked
+pair/propose.py           Step 3: optimizer LLM, one diagnosis per counterexample, five candidates, skeleton locked
 pair/materialize.py       Step 3: candidates -> prompt directories
 pair/fit_tasks.py         Step 4: the 12 longest training trajectories
 pair/selection.py         Step 4: Pass^2, ties by fewer steps
@@ -111,7 +111,7 @@ The verifier computes the empirical outcome hazard `H_t` (PRE pass rate minus PO
 
 ### Step 3: Adapting the compression prompt
 
-Each retained boundary becomes one counterexample: the raw segment the compressor consumed, the previous summary, the summary it produced, and the settled facts of the PRE and POST continuations. The optimizer first diagnoses every counterexample, then revises the two summary templates with the section structure, required fields, compression scope and output format fixed. Only the guidance inside each section changes, and every new clause cites the counterexamples it addresses.
+Each retained boundary becomes one counterexample: the raw segment the compressor consumed, the previous summary, the summary it produced, and the settled facts of the PRE and POST continuations. The optimizer works in two stages. It first diagnoses each counterexample in a separate call, judging the summary against the task, the agent's operating rules and the raw segment, and ranking the deviations that would change a continuation's actions. It then groups the diagnoses by failure mechanism and revises the two summary templates with the section structure, required fields, compression scope and output format fixed. Only the guidance inside each section changes, and every new clause cites the counterexamples it addresses. Diagnoses are saved next to the proposals and can be reused with `--reuse-analyses`; `--fill-invalid` redraws only candidates that failed validation.
 
 ```bash
 python -m pair.evidence --benchmark appworld --boundaries $B/boundaries.jsonl --rollouts $B/rollouts.jsonl \
@@ -120,7 +120,7 @@ python -m pair.propose --input $B/propose_r1/proposer_input.json --out $B/propos
 python -m pair.materialize --proposals $B/propose_r1/proposals.json --incumbent prompts/p0 --prefix prompts/p0_w4096_r1_c
 ```
 
-This writes `prompts/p0_w4096_r1_c1` ... `prompts/p0_w4096_r1_c5`, each a drop-in replacement for the original prompt directory. For a prefix-conditioned incumbent add `--agent-prefix-from $RUNS/p0_prefix_w4096_s1` to `pair.evidence`, so the optimizer sees the prefix its rules must hold against.
+This writes `prompts/p0_w4096_r1_c1` ... `prompts/p0_w4096_r1_c5`, each a drop-in replacement for the original prompt directory. For a prefix-conditioned incumbent add `--agent-prefix-from $RUNS/p0_prefix_w4096_s1` to `pair.evidence`: every counterexample then carries the prefix its compressor saw for that task, so the diagnosis can check the summary against the task statement and the agent's operating rules.
 
 ### Step 4: Selecting the adapted prompt
 

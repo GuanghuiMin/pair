@@ -8,8 +8,9 @@ LOOKUP_PREFIXES = ("find_", "get_", "list_", "calculate")
 PREFIX_NOTE = ("At run time the jinja variable {{ agent_prompt }} in both templates is replaced by the exact fixed prefix "
                "the downstream agent received: its system prompt (the customer-service domain policy and tool rules). "
                "In this benchmark the agent receives no task text — the customer's dialogue is the task and is part of "
-               "the history you summarise, never of the prefix. The text below is that prefix; it is the same for every "
-               "task in the domain, so any rule you write must hold for every conversation.")
+               "the history you summarise, never of the prefix. Each counterexample carries that prefix as "
+               "agent_prompt_seen_by_compressor; it is the same for every task in the domain, so any rule you write "
+               "must hold for every conversation.")
 
 
 def render_message(m: dict):
