@@ -17,7 +17,7 @@ python -m pair.benchmarks.officebench.run --tasks data/tasklists/officebench_tra
 python -m pair.benchmarks.officebench.rollouts mine --run $RUNS/${NAME}_s1 --out $B
 
 # Step 2
-python -m pair.benchmarks.officebench.rollouts run --boundaries $B/boundaries.jsonl --out $B --draws 3 --workers 20
+python -m pair.benchmarks.officebench.rollouts run --boundaries $B/boundaries.jsonl --out $B --rounds 3 --workers 20
 python -m pair.verifier --rollouts $B/rollouts.jsonl --out $B/effects.jsonl --hazard-min 0.5 --burden-min 5
 
 # Step 3

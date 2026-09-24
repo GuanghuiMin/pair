@@ -1,6 +1,6 @@
 """Step 2 (continuations): PRE/POST rollouts from AppWorld compaction boundaries.
 
-    python -m pair.benchmarks.appworld.rollouts --boundaries B/boundaries.jsonl --out B --draws 3 --workers 20
+    python -m pair.benchmarks.appworld.rollouts --boundaries B/boundaries.jsonl --out B --rounds 3 --workers 20
 
 Both arms restore the environment by replaying the recorded actions before the boundary into a fresh
 AppWorld instance and then hand the frozen agent one of two contexts:
@@ -8,8 +8,10 @@ AppWorld instance and then hand the frozen agent one of two contexts:
           plus the raw steps since the previous boundary
     POST  the context the agent actually saw: this compaction's summary plus the retained raw turn
 The agent runs with no further compression until it finishes or exhausts the remaining step budget
-(50 minus the boundary step); the end state is graded by AppWorld's evaluator. Draw d uses seed
-1000 + d. Re-running fills in missing (boundary, arm, draw) triples only.
+(50 minus the boundary step); the end state is graded by AppWorld's evaluator. Continuations are allocated by
+successive halving (pair.halving): round d runs draw d of both arms for the boundaries still active, every boundary in
+round 0 and the top half by current evidence of harm afterwards. Draw d uses seed 1000 + d. Re-running fills in
+missing (boundary, arm, draw) triples only.
 """
 import argparse
 import json
@@ -19,6 +21,7 @@ import traceback
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 
+from pair import halving
 from pair.benchmarks.appworld import agent as A
 from pair.benchmarks.appworld.boundaries import compactions, steps
 
@@ -84,7 +87,9 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--boundaries", required=True)
     ap.add_argument("--out", required=True)
-    ap.add_argument("--draws", type=int, default=3, help="independent continuations per arm")
+    ap.add_argument("--rounds", type=int, default=halving.ROUNDS, help="successive-halving rounds (one PRE/POST pair each)")
+    ap.add_argument("--keep", type=float, default=halving.KEEP, help="fraction of a round's boundaries kept for the next")
+    ap.add_argument("--seed", type=int, default=halving.SEED, help="tie-break order of the ranking")
     ap.add_argument("--model", default=os.environ.get("PAIR_AGENT_MODEL"))
     ap.add_argument("--temperature", type=float, default=1.0)
     ap.add_argument("--workers", type=int, default=10)
@@ -94,30 +99,35 @@ def main():
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
     path = out / "rollouts.jsonl"
-    have = {(r["boundary_id"], r["arm"], r["draw"]) for r in map(json.loads, open(path)) if not r["error"]} if path.exists() else set()
     bounds = [json.loads(l) for l in open(a.boundaries) if l.strip()]
     if a.boundary_ids:
         bounds = [b for b in bounds if b["boundary_id"] in set(a.boundary_ids)]
-    jobs = []
-    for b in bounds:
-        prefix_codes, ctx = contexts(b)
-        for arm in ("PRE", "POST"):
-            for d in range(a.draws):
-                if (b["boundary_id"], arm, d) in have:
+    ctxs = {b["boundary_id"]: contexts(b) for b in bounds}
+    for rnd in range(a.rounds):
+        draws = halving.load_draws(path)
+        keep = halving.active([b["boundary_id"] for b in bounds], draws, rnd, a.keep, seed=a.seed)
+        have = {(bid, arm, d) for bid, arms in draws.items() for arm in arms for d in arms[arm]}
+        jobs = []
+        for b in bounds:
+            if b["boundary_id"] not in keep:
+                continue
+            prefix_codes, ctx = ctxs[b["boundary_id"]]
+            for arm in ("PRE", "POST"):
+                if (b["boundary_id"], arm, rnd) in have:
                     continue
                 summary, turns = ctx[arm]
                 jobs.append({**{k: b[k] for k in ("boundary_id", "task_id", "split", "t", "step")},
-                             "arm": arm, "draw": d, "seed": SEED_BASE + d, "prefix_codes": prefix_codes,
+                             "arm": arm, "draw": rnd, "seed": SEED_BASE + rnd, "prefix_codes": prefix_codes,
                              "summary": summary, "turns": turns, "model": a.model, "temperature": a.temperature})
-    print(f"{len(bounds)} boundaries, {len(have)} rollouts present, {len(jobs)} to run", flush=True)
-    t0 = time.time()
-    with open(path, "a") as f, ProcessPoolExecutor(a.workers) as ex:
-        for i, fut in enumerate(as_completed([ex.submit(run_one, j) for j in jobs]), 1):
-            r = fut.result()
-            f.write(json.dumps(r) + "\n")
-            f.flush()
-            print(f"  [{i}/{len(jobs)}] {r['boundary_id']} {r['arm']}{r['draw']} steps={len(r['steps'])} "
-                  f"pass={r.get('success')} {r['termination_reason']} {(time.time() - t0) / 60:.1f}min", flush=True)
+        print(f"round {rnd + 1}/{a.rounds}: {len(keep)} of {len(bounds)} boundaries active, {len(jobs)} to run", flush=True)
+        t0 = time.time()
+        with open(path, "a") as f, ProcessPoolExecutor(a.workers) as ex:
+            for i, fut in enumerate(as_completed([ex.submit(run_one, j) for j in jobs]), 1):
+                r = fut.result()
+                f.write(json.dumps(r) + "\n")
+                f.flush()
+                print(f"  [{i}/{len(jobs)}] {r['boundary_id']} {r['arm']}{r['draw']} steps={len(r['steps'])} "
+                      f"pass={r.get('success')} {r['termination_reason']} {(time.time() - t0) / 60:.1f}min", flush=True)
 
 
 if __name__ == "__main__":

@@ -53,6 +53,7 @@ The exact commands are in [third_party/README.md](third_party/README.md).
 
 ```
 pair/compressor.py        summary compressor driven by a prompt directory (system_prompt / first_summary / update_summary)
+pair/halving.py           Step 2: successive-halving allocation of PRE/POST continuations
 pair/verifier.py          Step 2: outcome hazard and interaction burden per boundary, retention rule
 pair/evidence.py          Step 3: retained boundaries -> counterexamples for the optimizer
 pair/propose.py           Step 3: optimizer LLM, one diagnosis per counterexample, five candidates, skeleton locked
@@ -100,14 +101,14 @@ python -m pair.benchmarks.appworld.boundaries --run $RUNS/p0_w4096_s1 --out $B
 
 ### Step 2: Verifying adverse compaction boundaries
 
-For every boundary, run independent continuations from the pre-compaction context (PRE) and from the post-compaction context (POST). Both arms restore the environment by replaying the recorded actions, then let the frozen agent continue with no further compression until it finishes or exhausts the remaining step budget; the end state is graded by the benchmark's evaluator.
+For every boundary, run continuations from the pre-compaction context (PRE) and from the post-compaction context (POST). Both arms restore the environment by replaying the recorded actions, then let the frozen agent continue with no further compression until it finishes or exhausts the remaining step budget; the end state is graded by the benchmark's evaluator. Continuations are allocated by three-round successive halving (`pair/halving.py`): every boundary first receives one PRE/POST pair; after each round, the half of that round's boundaries with the strongest current evidence of harm, `max(mean(pass PRE - pass POST) / 0.5, mean(steps POST - steps PRE) / 5)`, receives the next pair, up to three pairs. On average a boundary costs 3.5 continuations instead of 6.
 
 ```bash
-python -m pair.benchmarks.appworld.rollouts --boundaries $B/boundaries.jsonl --out $B --draws 3 --workers 20
+python -m pair.benchmarks.appworld.rollouts --boundaries $B/boundaries.jsonl --out $B --rounds 3 --workers 20
 python -m pair.verifier --rollouts $B/rollouts.jsonl --out $B/effects.jsonl --hazard-min 0.5 --burden-min 5
 ```
 
-The verifier computes the empirical outcome hazard `H_t` (PRE pass rate minus POST pass rate) and the interaction burden `B_t` (mean POST steps minus mean PRE steps) and retains a boundary if `H_t >= 0.5` or `B_t >= 5`. Retained boundaries are labelled `error` or `burden`; the label selects the evidence channel shown to the optimizer.
+The verifier computes the empirical outcome hazard `H_t` (PRE pass rate minus POST pass rate) and the interaction burden `B_t` (mean POST steps minus mean PRE steps) and retains a boundary that completed all three rounds if `H_t >= 0.5` or `B_t >= 5`. Retained boundaries are labelled `error` or `burden`; the label selects the evidence channel shown to the optimizer.
 
 ### Step 3: Adapting the compression prompt
 

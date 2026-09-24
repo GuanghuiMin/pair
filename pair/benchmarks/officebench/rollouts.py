@@ -2,12 +2,14 @@
 
     python -m pair.benchmarks.officebench.rollouts mine  --run RUNS/officebench/p0_w2048_s1 --out B
     python -m pair.benchmarks.officebench.rollouts audit --run RUNS/officebench/p0_w2048_s1 --out B [--workers 20]
-    python -m pair.benchmarks.officebench.rollouts run   --boundaries B/boundaries.jsonl --out B --draws 3 --workers 20
+    python -m pair.benchmarks.officebench.rollouts run   --boundaries B/boundaries.jsonl --out B --rounds 3 --workers 20
 
 Same protocol as AppWorld: restore the environment by replaying the recorded actions before the
 boundary, hand the agent the PRE context (raw prefix at t = 1, otherwise previous summary plus the raw
 turns since the previous boundary) or the POST context (this summary plus the retained turn), run to
 completion or to the remaining budget with no further compression, grade with the benchmark's checkers.
+Continuations are allocated by successive halving (pair.halving): round d runs draw d of both arms for the
+boundaries still active, every boundary in round 0 and the top half by current evidence of harm afterwards.
 OfficeBench replay is checked, not assumed: every replayed observation is compared with the recorded
 one (timestamps masked); a boundary whose prefix does not reproduce is recorded as `replay_mismatch`
 and gets no continuation. `audit` replays every trajectory twice with no LLM call and reports replay
@@ -305,7 +307,9 @@ def main():
     ap.add_argument("--run", help="mine/audit: run directory")
     ap.add_argument("--boundaries", help="run: boundaries.jsonl")
     ap.add_argument("--out", required=True)
-    ap.add_argument("--draws", type=int, default=3)
+    ap.add_argument("--rounds", type=int, default=3, help="successive-halving rounds (one PRE/POST pair each)")
+    ap.add_argument("--keep", type=float, default=0.5, help="fraction of a round's boundaries kept for the next")
+    ap.add_argument("--seed", type=int, default=2027, help="tie-break order of the ranking")
     ap.add_argument("--boundary-ids", nargs="*", default=None)
     ap.add_argument("--task-ids", nargs="*", default=None, help="audit: only these task ids")
     ap.add_argument("--model", default=os.environ.get("PAIR_AGENT_MODEL"))
@@ -358,25 +362,29 @@ def main():
         return
 
     if a.mode == "run":
+        from pair import halving
         path = out / "rollouts.jsonl"
-        have = {(r["boundary_id"], r["arm"], r["draw"]) for r in map(json.loads, (l for l in open(path) if l.strip()))
-                if not r.get("error")} if path.exists() else set()
         bounds = [json.loads(l) for l in open(a.boundaries) if l.strip()]
         if a.boundary_ids:
             bounds = [b for b in bounds if b["boundary_id"] in set(a.boundary_ids)]
-        jobs = [{"mode": "rollout", "boundary": b, "arm": arm, "draw": d, "model": a.model, "trajectory_host_path": b["trajectory"]}
-                for b in bounds for arm in ("PRE", "POST") for d in range(a.draws) if (b["boundary_id"], arm, d) not in have]
-        print(f"{len(bounds)} boundaries, {len(have)} rollouts present, {len(jobs)} to run, {a.workers} containers", flush=True)
-        t0 = time.time()
-        with open(path, "a") as f, ThreadPoolExecutor(a.workers) as ex:
-            futs = [ex.submit(run_ctr, j, out, a.image, a.scratch, a.timeout,
-                              f"{j['boundary']['task_id']}_t{j['boundary']['t']}_{j['arm']}{j['draw']}") for j in jobs]
-            for i, fut in enumerate(as_completed(futs), 1):
-                r = fut.result()
-                f.write(json.dumps(r) + "\n")
-                f.flush()
-                print(f"  [{i}/{len(jobs)}] {r.get('boundary_id')} {r.get('arm')}{r.get('draw')} steps={len(r.get('steps') or [])} "
-                      f"pass={r.get('success')} {r.get('termination_reason')} err={(r.get('error') or '')[:80]} {(time.time() - t0) / 60:.1f}min", flush=True)
+        for rnd in range(a.rounds):
+            draws = halving.load_draws(path)
+            keep = halving.active([b["boundary_id"] for b in bounds], draws, rnd, a.keep, seed=a.seed)
+            have = {(bid, arm, d) for bid, arms in draws.items() for arm in arms for d in arms[arm]}
+            jobs = [{"mode": "rollout", "boundary": b, "arm": arm, "draw": rnd, "model": a.model, "trajectory_host_path": b["trajectory"]}
+                    for b in bounds if b["boundary_id"] in keep for arm in ("PRE", "POST") if (b["boundary_id"], arm, rnd) not in have]
+            print(f"round {rnd + 1}/{a.rounds}: {len(keep)} of {len(bounds)} boundaries active, {len(jobs)} to run, "
+                  f"{a.workers} containers", flush=True)
+            t0 = time.time()
+            with open(path, "a") as f, ThreadPoolExecutor(a.workers) as ex:
+                futs = [ex.submit(run_ctr, j, out, a.image, a.scratch, a.timeout,
+                                  f"{j['boundary']['task_id']}_t{j['boundary']['t']}_{j['arm']}{j['draw']}") for j in jobs]
+                for i, fut in enumerate(as_completed(futs), 1):
+                    r = fut.result()
+                    f.write(json.dumps(r) + "\n")
+                    f.flush()
+                    print(f"  [{i}/{len(jobs)}] {r.get('boundary_id')} {r.get('arm')}{r.get('draw')} steps={len(r.get('steps') or [])} "
+                          f"pass={r.get('success')} {r.get('termination_reason')} err={(r.get('error') or '')[:80]} {(time.time() - t0) / 60:.1f}min", flush=True)
         return
     ap.error("mode required (mine | audit | run) or --job")
 

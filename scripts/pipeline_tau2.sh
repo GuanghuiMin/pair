@@ -18,7 +18,7 @@ python -m pair.benchmarks.tau2.run --domain retail --split train --out $RUNS/$NA
 (cd $TAU2_HOME && $TAU2_PY -m pair.benchmarks.tau2.rollouts mine --run $RUNS/${NAME}_s1 --domain retail --out $B)
 
 # Step 2
-(cd $TAU2_HOME && $TAU2_PY -m pair.benchmarks.tau2.rollouts run --boundaries $B/boundaries.jsonl --out $B --draws 3 --workers 24)
+(cd $TAU2_HOME && $TAU2_PY -m pair.benchmarks.tau2.rollouts run --boundaries $B/boundaries.jsonl --out $B --rounds 3 --workers 24)
 python -m pair.verifier --rollouts $B/rollouts.jsonl --out $B/effects.jsonl --hazard-min 0.5 --burden-min 5
 
 # Step 3

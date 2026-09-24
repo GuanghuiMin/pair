@@ -1,7 +1,7 @@
 """Steps 1-2 for tau2-bench: mine compaction boundaries and run PRE/POST continuations.
 
     (tau2 env) python -m pair.benchmarks.tau2.rollouts mine --run RUNS/tau2/p0_w2048_s1 --domain retail --out B
-    (tau2 env) python -m pair.benchmarks.tau2.rollouts run  --boundaries B/boundaries.jsonl --out B --draws 3 --workers 24
+    (tau2 env) python -m pair.benchmarks.tau2.rollouts run  --boundaries B/boundaries.jsonl --out B --rounds 3 --workers 24
 
 A boundary is one recorded compaction: (task, compaction index t, n_seen = messages consumed when the
 compressor fired). The conversation prefix messages[:n_seen] restores the environment (tau2 replays the
@@ -10,6 +10,8 @@ state-changing tool calls), the user simulator and the agent; no container is ne
     POST  the agent continues from the recorded summary plus the raw tail (the most recent turn)
 Budget = the remaining orchestrator steps of the recorded run (100 minus the prefix), at least 10.
 Success is tau2's deterministic reward on the completed conversation; steps are the agent's new turns.
+Continuations are allocated by successive halving (pair.halving): round d runs draw d of both arms for the
+boundaries still active, every boundary in round 0 and the top half by current evidence of harm afterwards.
 """
 from __future__ import annotations
 import argparse
@@ -26,6 +28,7 @@ from pathlib import Path
 PAIR_HOME = str(Path(__file__).resolve().parents[3])
 if PAIR_HOME not in sys.path:
     sys.path.insert(0, PAIR_HOME)
+from pair import halving  # noqa: E402
 from pair.benchmarks.tau2.convert import deterministic_success  # noqa: E402
 
 MAX_STEPS_TOTAL = 100
@@ -133,26 +136,24 @@ def run(a):
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
     path = out / "rollouts.jsonl"
-    have = set()
-    if path.exists():
-        for l in open(path):
-            if l.strip():
-                r = json.loads(l)
-                if not r.get("error"):
-                    have.add((r["boundary_id"], r["arm"], r["draw"]))
-    jobs = [(b, arm, d) for b in bounds for arm in ("PRE", "POST") for d in range(a.draws) if (b["boundary_id"], arm, d) not in have]
-    print(f"{len(bounds)} boundaries, {len(have)} rollouts present, {len(jobs)} to run, {a.workers} workers", flush=True)
-    t0, done = time.time(), 0
-    with ThreadPoolExecutor(max_workers=a.workers) as ex:
-        futs = [ex.submit(rollout_job, b, arm, d, a.user_llm, a.user_temperature, a.agent_llm) for b, arm, d in jobs]
-        for fut in as_completed(futs):
-            rec = fut.result()
-            done += 1
-            with _LOCK, open(path, "a") as f:
-                f.write(json.dumps(rec, ensure_ascii=False, default=str) + "\n")
-            print(f"  [{done}/{len(jobs)}] {rec['boundary_id']} {rec['arm']}{rec['draw']} steps={len(rec['steps'])} pass={rec['success']} "
-                  f"{rec['termination_reason']} err={rec['error']} {(time.time() - t0) / 60:.1f}min", flush=True)
-
+    for rnd in range(a.rounds):
+        draws = halving.load_draws(path)
+        keep = halving.active([b["boundary_id"] for b in bounds], draws, rnd, a.keep, seed=a.seed)
+        have = {(bid, arm, d) for bid, arms in draws.items() for arm in arms for d in arms[arm]}
+        jobs = [(b, arm, rnd) for b in bounds if b["boundary_id"] in keep for arm in ("PRE", "POST")
+                if (b["boundary_id"], arm, rnd) not in have]
+        print(f"round {rnd + 1}/{a.rounds}: {len(keep)} of {len(bounds)} boundaries active, {len(jobs)} to run, "
+              f"{a.workers} workers", flush=True)
+        t0, done = time.time(), 0
+        with ThreadPoolExecutor(max_workers=a.workers) as ex:
+            futs = [ex.submit(rollout_job, b, arm, d, a.user_llm, a.user_temperature, a.agent_llm) for b, arm, d in jobs]
+            for fut in as_completed(futs):
+                rec = fut.result()
+                done += 1
+                with _LOCK, open(path, "a") as f:
+                    f.write(json.dumps(rec, ensure_ascii=False, default=str) + "\n")
+                print(f"  [{done}/{len(jobs)}] {rec['boundary_id']} {rec['arm']}{rec['draw']} steps={len(rec['steps'])} pass={rec['success']} "
+                      f"{rec['termination_reason']} err={rec['error']} {(time.time() - t0) / 60:.1f}min", flush=True)
 
 def main():
     ap = argparse.ArgumentParser()
@@ -164,7 +165,9 @@ def main():
     r = sub.add_parser("run")
     r.add_argument("--boundaries", required=True)
     r.add_argument("--out", required=True)
-    r.add_argument("--draws", type=int, default=3)
+    r.add_argument("--rounds", type=int, default=halving.ROUNDS, help="successive-halving rounds (one PRE/POST pair each)")
+    r.add_argument("--keep", type=float, default=halving.KEEP, help="fraction of a round's boundaries kept for the next")
+    r.add_argument("--seed", type=int, default=halving.SEED, help="tie-break order of the ranking")
     r.add_argument("--workers", type=int, default=6)
     r.add_argument("--boundary-ids", nargs="*", default=None)
     r.add_argument("--user-llm", default="gpt-4.1-2025-04-14")
