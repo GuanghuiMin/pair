@@ -63,7 +63,7 @@ class PairLLMAgent(LLMAgent):
         self.prev_summary = None
         self.task_id = None
         self.trial = None
-        self.preset = None              # (summary, tail messages): start of a POST continuation
+        self.preset = None              # (summary, tail messages): start of a POST or t >= 2 PRE continuation
 
     def _log(self, rec: dict):
         if self.log_path:

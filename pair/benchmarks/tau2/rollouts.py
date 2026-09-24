@@ -6,7 +6,8 @@
 A boundary is one recorded compaction: (task, compaction index t, n_seen = messages consumed when the
 compressor fired). The conversation prefix messages[:n_seen] restores the environment (tau2 replays the
 state-changing tool calls), the user simulator and the agent; no container is needed.
-    PRE   the agent continues from the raw prefix, compaction off
+    PRE   the context without this compaction: the raw prefix at t = 1, otherwise the previous summary plus the
+          raw messages since the previous boundary (what the agent held just before this compaction), compaction off
     POST  the agent continues from the recorded summary plus the raw tail (the most recent turn)
 Budget = the remaining orchestrator steps of the recorded run (100 minus the prefix), at least 10.
 Success is tau2's deterministic reward on the completed conversation; steps are the agent's new turns.
@@ -107,6 +108,10 @@ def rollout_job(b: dict, arm: str, draw: int, user_llm: str, user_temp: float, a
         if arm == "POST":
             starts = [i for i, m in enumerate(prefix) if not isinstance(m, ToolMessage)]
             orch.agent.preset = (b["summary"], deepcopy(prefix[starts[-1] if starts else 0:]))
+        elif int(b["t"]) >= 2:
+            if not b.get("prev_summary"):
+                raise ValueError(f"{b['boundary_id']}: no previous summary for the PRE context")
+            orch.agent.preset = (b["prev_summary"], deepcopy(prefix[int(b["raw_suffix"][0]):]))
         sim = run_simulation(orch, evaluation_type=EvaluationType.ALL)
         new = (sim.messages or [])[len(prefix):]
         steps = []
