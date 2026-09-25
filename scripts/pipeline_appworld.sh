@@ -16,7 +16,7 @@ python -m pair.benchmarks.appworld.run --tasks data/tasklists/appworld_train.jso
     --method $START --window $WINDOW --seed 1 --workers 20
 python -m pair.benchmarks.appworld.boundaries --run $RUNS/${NAME}_s1 --out $B
 
-# Step 2: PRE/POST continuations at every boundary, then the hazard / burden verifier.
+# Step 2: PRE/POST continuations allocated by three-round successive halving, then the hazard / burden verifier.
 python -m pair.benchmarks.appworld.rollouts --boundaries $B/boundaries.jsonl --out $B --rounds 3 --workers 20
 python -m pair.verifier --rollouts $B/rollouts.jsonl --out $B/effects.jsonl --hazard-min 0.5 --burden-min 5
 
