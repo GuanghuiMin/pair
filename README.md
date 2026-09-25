@@ -59,7 +59,7 @@ pair/evidence.py          Step 3: retained boundaries -> counterexamples for the
 pair/propose.py           Step 3: optimizer LLM, one diagnosis per counterexample, five candidates, skeleton locked
 pair/materialize.py       Step 3: candidates -> prompt directories
 pair/fit_tasks.py         Step 4: the 12 longest training trajectories
-pair/selection.py         Step 4: Pass^2, ties by fewer steps
+pair/selection.py         Step 4: most fit tasks passed in one run, ties by fewer steps
 pair/report.py            pass rate, Pass^k, Pass@k over evaluation runs
 pair/benchmarks/<name>/   run.py (agent runner), boundaries / rollouts (Steps 1-2), evidence.py (benchmark-specific rendering)
 prompts/p0                the original structured compression prompt P0 (history-only start)
@@ -125,17 +125,16 @@ This writes `prompts/p0_w4096_r1_c1` ... `prompts/p0_w4096_r1_c5`, each a drop-i
 
 ### Step 4: Selecting the adapted prompt
 
-Boundary evidence was collected under the original compressor, and a revised prompt changes both the summaries and the boundaries visited, so candidates are validated end to end. Take the 12 training tasks with the longest compressed trajectories, run each candidate twice on them, and select by Pass^2 with ties broken by the lower mean number of interaction steps.
+Boundary evidence was collected under the original compressor, and a revised prompt changes both the summaries and the boundaries visited, so candidates are validated end to end. Take the 12 training tasks with the longest compressed trajectories, run each candidate once on them, and select the candidate that passes the most of them, with ties broken by the lower mean number of interaction steps.
 
 ```bash
 python -m pair.fit_tasks --run $RUNS/p0_w4096_s1 --n 12 --out $B/fit_tasks.jsonl
-for i in 1 2 3 4 5; do for s in 1 2; do
-    python -m pair.benchmarks.appworld.run --tasks $B/fit_tasks.jsonl --out $RUNS/fit_r1_c${i}_s$s \
-        --method prompts/p0_w4096_r1_c$i --window 4096 --seed $s --workers 12
-done; done
-python -m pair.selection --candidate c1=$RUNS/fit_r1_c1_s1,$RUNS/fit_r1_c1_s2 --candidate c2=$RUNS/fit_r1_c2_s1,$RUNS/fit_r1_c2_s2 \
-    --candidate c3=$RUNS/fit_r1_c3_s1,$RUNS/fit_r1_c3_s2 --candidate c4=$RUNS/fit_r1_c4_s1,$RUNS/fit_r1_c4_s2 \
-    --candidate c5=$RUNS/fit_r1_c5_s1,$RUNS/fit_r1_c5_s2
+for i in 1 2 3 4 5; do
+    python -m pair.benchmarks.appworld.run --tasks $B/fit_tasks.jsonl --out $RUNS/fit_r1_c${i}_s1 \
+        --method prompts/p0_w4096_r1_c$i --window 4096 --seed 1 --workers 12
+done
+python -m pair.selection --candidate c1=$RUNS/fit_r1_c1_s1 --candidate c2=$RUNS/fit_r1_c2_s1 --candidate c3=$RUNS/fit_r1_c3_s1 \
+    --candidate c4=$RUNS/fit_r1_c4_s1 --candidate c5=$RUNS/fit_r1_c5_s1
 ```
 
 The selected prompt `P*` is used without further adaptation for held-out evaluation.

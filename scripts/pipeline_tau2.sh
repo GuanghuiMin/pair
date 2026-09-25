@@ -34,7 +34,7 @@ for i in 1 2 3 4 5; do
     C=prompts/tau2_${NAME}_${ROUND}_c$i
     [ -d $C ] || continue
     python -m pair.benchmarks.tau2.run --domain retail --split train --out $RUNS/fit_${NAME}_${ROUND}_c$i \
-        --method $C --window $WINDOW --seeds 1,2 --concurrency 12 --tasks $B/fit_tasks.jsonl
-    SELECT_ARGS+=(--candidate c$i=$RUNS/fit_${NAME}_${ROUND}_c${i}_s1,$RUNS/fit_${NAME}_${ROUND}_c${i}_s2)
+        --method $C --window $WINDOW --seeds 1 --concurrency 12 --tasks $B/fit_tasks.jsonl
+    SELECT_ARGS+=(--candidate c$i=$RUNS/fit_${NAME}_${ROUND}_c${i}_s1)
 done
 python -m pair.selection "${SELECT_ARGS[@]}"

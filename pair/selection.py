@@ -1,10 +1,10 @@
-"""Step 4 (selection): pick the candidate with the highest Pass^k on the fit set, ties by fewer steps.
+"""Step 4 (selection): pick the candidate that passes the most fit tasks, ties by fewer steps.
 
-    python -m pair.selection --candidate c1=RUNS/fit_c1_s1,RUNS/fit_c1_s2 --candidate c2=RUNS/fit_c2_s1,RUNS/fit_c2_s2 ...
+    python -m pair.selection --candidate c1=RUNS/fit_c1_s1 --candidate c2=RUNS/fit_c2_s1 ...
 
-Each candidate names its k independent runs of the fit tasks. Pass^k counts tasks that pass in every
-run; Steps is the mean number of interaction steps over all runs. Candidates are ordered by
-(Pass^k, -Steps), lexicographically.
+The pipeline runs every candidate once (seed 1) on the fit tasks; the criterion is the number of fit tasks it
+passes, ties broken by the lower mean number of interaction steps. A candidate may also name several runs
+(NAME=RUN_DIR,RUN_DIR,...); the count is then Pass^k, the tasks that pass in every run.
 """
 import argparse
 import json

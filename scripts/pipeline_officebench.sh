@@ -32,10 +32,8 @@ SELECT_ARGS=()
 for i in 1 2 3 4 5; do
     C=prompts/ob_${NAME}_${ROUND}_c$i
     [ -d $C ] || continue
-    for s in 1 2; do
-        python -m pair.benchmarks.officebench.run --tasks $B/fit_tasks.jsonl --out $RUNS/fit_${NAME}_${ROUND}_c${i}_s$s \
-            --tag fit_${NAME}_${ROUND}_c${i}_s$s --method $C --window $WINDOW --seed $s --workers 12
-    done
-    SELECT_ARGS+=(--candidate c$i=$RUNS/fit_${NAME}_${ROUND}_c${i}_s1,$RUNS/fit_${NAME}_${ROUND}_c${i}_s2)
+    python -m pair.benchmarks.officebench.run --tasks $B/fit_tasks.jsonl --out $RUNS/fit_${NAME}_${ROUND}_c${i}_s1 \
+        --tag fit_${NAME}_${ROUND}_c${i}_s1 --method $C --window $WINDOW --seed 1 --workers 12
+    SELECT_ARGS+=(--candidate c$i=$RUNS/fit_${NAME}_${ROUND}_c${i}_s1)
 done
 python -m pair.selection "${SELECT_ARGS[@]}"

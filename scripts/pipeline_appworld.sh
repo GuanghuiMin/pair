@@ -26,16 +26,14 @@ python -m pair.evidence --benchmark appworld --boundaries $B/boundaries.jsonl --
 python -m pair.propose --input $B/propose_$ROUND/proposer_input.json --out $B/propose_$ROUND/proposals.json --candidates 5
 python -m pair.materialize --proposals $B/propose_$ROUND/proposals.json --incumbent $START --prefix prompts/${NAME}_${ROUND}_c
 
-# Step 4: two runs of each candidate on the 12 longest training trajectories, then Pass^2 selection.
+# Step 4: one run of each candidate on the 12 longest training trajectories, then select by tasks passed.
 python -m pair.fit_tasks --run $RUNS/${NAME}_s1 --n 12 --out $B/fit_tasks.jsonl
 SELECT_ARGS=()
 for i in 1 2 3 4 5; do
     C=prompts/${NAME}_${ROUND}_c$i
     [ -d $C ] || continue
-    for s in 1 2; do
-        python -m pair.benchmarks.appworld.run --tasks $B/fit_tasks.jsonl --out $RUNS/fit_${NAME}_${ROUND}_c${i}_s$s \
-            --method $C --window $WINDOW --seed $s --workers 12
-    done
-    SELECT_ARGS+=(--candidate c$i=$RUNS/fit_${NAME}_${ROUND}_c${i}_s1,$RUNS/fit_${NAME}_${ROUND}_c${i}_s2)
+    python -m pair.benchmarks.appworld.run --tasks $B/fit_tasks.jsonl --out $RUNS/fit_${NAME}_${ROUND}_c${i}_s1 \
+        --method $C --window $WINDOW --seed 1 --workers 12
+    SELECT_ARGS+=(--candidate c$i=$RUNS/fit_${NAME}_${ROUND}_c${i}_s1)
 done
 python -m pair.selection "${SELECT_ARGS[@]}"
