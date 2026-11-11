@@ -1,13 +1,9 @@
-"""AppWorld-specific pieces of a counterexample (see pair.evidence)."""
 import json
-import re
 from pathlib import Path
 
 from pair.benchmarks.appworld.agent import APPWORLD_DIR
 from pair.benchmarks.appworld.boundaries import compactions, steps
 
-API = re.compile(r"apis\.([a-z_]+)\.([a-z_]+)\s*\(")
-COMPLETE = re.compile(r"complete_task\(([^)]{0,120})")
 
 PREFIX_NOTE = ("At run time the jinja variable {{ agent_prompt }} in both templates is replaced by the exact first "
                "user message the downstream agent received for that task (its operating instructions, the "
@@ -36,29 +32,13 @@ def segment(b: dict, cache: dict, obs_chars):
              "observation": cut(num[i]["observation"], obs_chars)} for i in range(lo, hi)]
 
 
-def terminal(r: dict) -> str:
-    return r["termination_reason"]
-
-
-def facts(r: dict) -> dict:
-    """Re-work in a continuation: repeated logins and documentation reads; the closing submission."""
-    redo, subs = {}, []
-    for s in r["steps"]:
-        code = s["code"] or ""
-        for app, op in API.findall(code):
-            if op in ("login", "show_account_passwords"):
-                redo["re_login"] = redo.get("re_login", 0) + 1
-            elif app == "api_docs":
-                redo["re_read_docs"] = redo.get("re_read_docs", 0) + 1
-        m = COMPLETE.search(code)
-        if m:
-            subs.append(code[code.rfind("apis.", 0, m.start()):m.end() + 1].strip()[:120])
-    return {"final_submission": subs[-1] if subs else None, "redo_counts": redo}
-
-
 def agent_prefix(run_dir: Path, task_id: str) -> str:
     return json.load(open(run_dir / "trajectories" / f"{task_id}.json"))["first_prompt"]
 
 
 def leak_probe(b: dict, cache: dict) -> str:
     return (APPWORLD_DIR / "prompts" / "prompt_v1.jinja").read_text()[2000:2300]
+
+
+def step(s: dict) -> dict:
+    return {"reasoning": s.get("reasoning") or "", "code": s.get("code") or "", "observation": s.get("observation")}

@@ -55,8 +55,8 @@ The exact commands are in [third_party/README.md](third_party/README.md).
 pair/compressor.py        summary compressor driven by a prompt directory (system_prompt / first_summary / update_summary)
 pair/halving.py           Step 2: successive-halving allocation of PRE/POST continuations
 pair/verifier.py          Step 2: outcome hazard and interaction burden per boundary, retention rule
-pair/evidence.py          Step 3: retained boundaries -> counterexamples for the optimizer
-pair/propose.py           Step 3: optimizer LLM, one diagnosis per counterexample, five candidates, skeleton locked
+pair/evidence.py          Step 3: retained boundaries -> events for the optimizer (one PRE and one POST continuation each)
+pair/propose.py           Step 3: optimizer LLM, one analysis per event, five candidates, skeleton locked
 pair/materialize.py       Step 3: candidates -> prompt directories
 pair/fit_tasks.py         Step 4: the 12 longest training trajectories
 pair/selection.py         Step 4: most fit tasks passed in one run, ties by fewer steps
@@ -108,11 +108,11 @@ python -m pair.benchmarks.appworld.rollouts --boundaries $B/boundaries.jsonl --o
 python -m pair.verifier --rollouts $B/rollouts.jsonl --out $B/effects.jsonl --hazard-min 0.5 --burden-min 5
 ```
 
-The verifier computes the empirical outcome hazard `H_t` (PRE pass rate minus POST pass rate) and the interaction burden `B_t` (mean POST steps minus mean PRE steps) and retains a boundary that completed all three rounds if `H_t >= 0.5` or `B_t >= 5`. Retained boundaries are labelled `error` or `burden`; the label selects the evidence channel shown to the optimizer.
+The verifier computes the empirical outcome hazard `H_t` (PRE pass rate minus POST pass rate) and the interaction burden `B_t` (mean POST steps minus mean PRE steps) and retains a boundary that completed all three rounds if `H_t >= 0.5` or `B_t >= 5`. Retained boundaries are labelled `error` or `burden`; the label sets the event type shown to the optimizer (`pass` for `error`, `burden` for `burden`).
 
 ### Step 3: Adapting the compression prompt
 
-Each retained boundary becomes one counterexample: the raw segment the compressor consumed, the previous summary, the summary it produced, and the settled facts of the PRE and POST continuations. The optimizer works in two stages. It first diagnoses each counterexample in a separate call, judging the summary against the task, the agent's operating rules and the raw segment, and ranking the deviations that would change a continuation's actions. It then groups the diagnoses by failure mechanism and revises the two summary templates with the section structure, required fields, compression scope and output format fixed. Only the guidance inside each section changes, and every new clause cites the counterexamples it addresses. Diagnoses are saved next to the proposals and can be reused with `--reuse-analyses`; `--fill-invalid` redraws only candidates that failed validation.
+Each retained boundary becomes one event: the raw segment the compressor consumed, the previous summary, the summary it produced, its event type, and two continuations from the same state, each with every step (observations cut at 20,000 characters) and whether it passed. For a `pass` event the shown PRE continuation is the first that passed and the shown POST continuation the first that failed; for a `burden` event they are the PRE continuation with the fewest steps and the POST continuation with the most. Which draws were shown is written to `selected_continuations.jsonl`. The optimizer works in two stages. It first analyses each event in a separate call: it reads both continuations step by step, traces every difference to the sentence of the summary the agent acted on or to information the summary lacked, and states whether the raw segment established that sentence or whether the summary added it, stated it more firmly, or dropped it; observations inside the continuations are not treated as part of the raw segment, and the outcome is not re-judged. It then works out from the analyses what should change, told exactly how each analysis was produced and that the compressor sees only the history up to the compression point, and revises the two summary templates with the section structure, required fields, compression scope and output format fixed. This second stage sees only whether each continuation passed, not its steps. Only the guidance inside each section changes, and every new clause cites the events it addresses. Analyses are saved next to the proposals and can be reused with `--reuse-analyses`; `--fill-invalid` redraws only candidates that failed validation.
 
 ```bash
 python -m pair.evidence --benchmark appworld --boundaries $B/boundaries.jsonl --rollouts $B/rollouts.jsonl \
@@ -121,7 +121,7 @@ python -m pair.propose --input $B/propose_r1/proposer_input.json --out $B/propos
 python -m pair.materialize --proposals $B/propose_r1/proposals.json --incumbent prompts/p0 --prefix prompts/p0_w4096_r1_c
 ```
 
-This writes `prompts/p0_w4096_r1_c1` ... `prompts/p0_w4096_r1_c5`, each a drop-in replacement for the original prompt directory. For a prefix-conditioned incumbent add `--agent-prefix-from $RUNS/p0_prefix_w4096_s1` to `pair.evidence`: every counterexample then carries the prefix its compressor saw for that task, so the diagnosis can check the summary against the task statement and the agent's operating rules.
+This writes `prompts/p0_w4096_r1_c1` ... `prompts/p0_w4096_r1_c5`, each a drop-in replacement for the original prompt directory. For a prefix-conditioned incumbent add `--agent-prefix-from $RUNS/p0_prefix_w4096_s1` to `pair.evidence`: every event then carries the prefix its compressor saw for that task, so the analysis can check the summary against the task statement and the agent's operating rules.
 
 ### Step 4: Selecting the adapted prompt
 
